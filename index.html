@@ -14,20 +14,27 @@
   --r-input:12px; --r-btn:16px; --r-card:24px; --r-sheet:32px;
   --shadow:0 4px 16px rgba(0,0,0,0.06);
   --sp-1:4px; --sp-2:8px; --sp-3:16px; --sp-4:24px; --sp-5:32px; --sp-6:48px;
+  /* Altura real visible del navegador móvil. 100vh en celulares suele medir la pantalla
+     COMPLETA como si no hubiera barra de direcciones ni teclado, así que el contenido
+     queda más alto de lo visible (se ve "muy grande"/cortado) y los botones al fondo de
+     una columna flex quedan tapados cuando se abre el teclado. Este valor lo actualiza
+     JS con window.visualViewport, que sí refleja el alto real disponible en cada momento.
+     100dvh es el fallback moderno mientras carga el JS. */
+  --app-height: 100dvh;
 }
 *{box-sizing:border-box;}
 body{margin:0;background:#DCE3EE;font-family:'Inter',sans-serif;color:var(--text-900);}
-#app{max-width:430px;min-width:0;margin:0 auto;min-height:100vh;background:var(--bg);position:relative;overflow-x:hidden;box-shadow:0 0 40px rgba(0,0,0,0.15);}
+#app{max-width:430px;min-width:0;margin:0 auto;min-height:var(--app-height);background:var(--bg);position:relative;overflow-x:hidden;box-shadow:0 0 40px rgba(0,0,0,0.15);}
 h1,h2,h3,.amount,.brand,button{font-family:'Poppins',sans-serif;}
 button{cursor:pointer;font-weight:600;border:none;background:none;color:inherit;}
 input,select,textarea{font-family:'Inter',sans-serif;font-size:16px;}
 ::-webkit-scrollbar{display:none;}
 a{color:inherit;}
 
-#screen-root{padding:0 16px 100px;min-height:100vh;}
+#screen-root{padding:0 16px 100px;min-height:var(--app-height);}
 .screen{animation:fadein .18s ease;}
 @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
-.full-screen{padding:0;min-height:100vh;}
+.full-screen{padding:0;min-height:var(--app-height);}
 
 /* Buttons */
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border-radius:var(--r-btn);padding:0 20px;font-size:16px;width:100%;transition:transform .15s ease, opacity .15s ease;}
@@ -53,7 +60,8 @@ a{color:inherit;}
 .field.error input{border-color:var(--critical);}
 .field .err-msg{color:var(--critical);font-size:12px;margin-top:4px;display:none;}
 .field.error .err-msg{display:block;}
-.money-display{font-family:'Poppins';font-weight:600;font-size:30px;text-align:center;padding:20px 0 8px;color:var(--blue-900);}
+.money-display{font-family:'Poppins';font-weight:600;font-size:30px;text-align:center;padding:18px 12px;color:var(--blue-900);border:1.5px solid var(--gray-200);border-radius:var(--r-input);background:#fff;width:100%;}
+.money-display:focus{outline:none;border-color:var(--blue-400);background:var(--blue-50);}
 
 /* Chips / badges */
 .chip{display:inline-flex;align-items:center;padding:6px 14px;border-radius:100px;background:#fff;border:1.5px solid var(--gray-200);font-size:13px;font-weight:600;color:var(--text-700);white-space:nowrap;}
@@ -179,7 +187,7 @@ a{color:inherit;}
 .ob-progress{display:flex;gap:5px;padding:20px 20px 0;}
 .ob-progress span{flex:1;height:4px;border-radius:100px;background:var(--gray-200);}
 .ob-progress span.done{background:var(--blue-900);}
-.ob-wrap{padding:24px 20px 24px;display:flex;flex-direction:column;min-height:100vh;}
+.ob-wrap{padding:24px 20px 24px;display:flex;flex-direction:column;min-height:var(--app-height);}
 .ob-body{flex:1;}
 .ob-mascot{font-size:52px;text-align:center;margin:10px 0 4px;}
 .ob-title{font-size:24px;font-weight:600;margin:14px 0 6px;}
@@ -187,7 +195,7 @@ a{color:inherit;}
 .ob-foot{display:flex;gap:10px;padding-top:16px;}
 
 /* login/pin */
-.center-screen{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;background:linear-gradient(180deg,var(--blue-900),var(--blue-700) 60%, var(--bg) 60%);}
+.center-screen{min-height:var(--app-height);display:flex;flex-direction:column;justify-content:center;padding:32px 24px;background:linear-gradient(180deg,var(--blue-900),var(--blue-700) 60%, var(--bg) 60%);}
 .login-card{background:#fff;border-radius:24px;padding:28px 22px;box-shadow:var(--shadow);}
 .logo-hero{display:flex;flex-direction:column;align-items:center;margin-bottom:28px;}
 .logo-hero .logo{width:64px;height:64px;margin-bottom:10px;}
@@ -292,7 +300,7 @@ function uid(){ return Math.random().toString(36).slice(2,10); }
 
 function defaultState(){
   return {
-    user:{ nickname:'', passwordHash:'', pinHash:'', currency:'COP', primaryIncomeDay:1, incomeFrequency:'mensual', incomeDays:[1], monthlyIncomeTarget:0, monthlyBudgetTarget:0, notificationsEnabled:true, showAmountsInNotifications:false },
+    user:{ nickname:'', passwordHash:'', pinHash:'', securityQuestion:'', securityAnswerHash:'', currency:'COP', primaryIncomeDay:1, incomeFrequency:'mensual', incomeDays:[1], monthlyIncomeTarget:0, monthlyBudgetTarget:0, notificationsEnabled:true, showAmountsInNotifications:false },
     onboardingDone:false,
     showAmounts:true,
     currentPeriod: currentPeriodStr(),
@@ -345,8 +353,13 @@ function normalizeState(){
       state.user.incomeDays=[state.user.primaryIncomeDay||1];
     }
     if(typeof state.user.monthlyBudgetTarget === 'undefined') state.user.monthlyBudgetTarget = 0;
+    if(typeof state.user.securityQuestion === 'undefined') state.user.securityQuestion='';
+    if(typeof state.user.securityAnswerHash === 'undefined') state.user.securityAnswerHash='';
   }
 }
+function normalizeAnswer(a){ return String(a||'').trim().toLowerCase(); }
+function securityAnswerMatches(a){ return !!state.user.securityAnswerHash && state.user.securityAnswerHash===simpleHash(normalizeAnswer(a)); }
+function hasRecoverySetup(){ return !!(state.user.securityQuestion && state.user.securityAnswerHash); }
 function passwordMatches(pass){ return state.user.passwordHash === simpleHash(pass); }
 function pinMatches(pin){ return state.user.pinHash === simpleHash(pin); }
 async function loadState(){
@@ -542,7 +555,7 @@ function ensureInstanceForPeriod(ob, period){
   let dueDate;
   if(ob.type==='one_time') dueDate = ob.dueDate;
   else dueDate = dueDateForPeriod(period, ob.dueDay || (ob.loan && ob.loan.firstPaymentDate ? parseInt(ob.loan.firstPaymentDate.slice(8,10),10) : 1));
-  const expected = ob.type==='loan' ? (ob.loan?(ob.loan.nextInstallmentAmount||ob.loan.installment):ob.expectedAmount) : ob.expectedAmount;
+  const expected = ob.type==='loan' ? (ob.loan? (ob.loan.nextInstallmentAmount!=null ? ob.loan.nextInstallmentAmount : ob.loan.installment+(ob.loan.insurance||0)) : ob.expectedAmount) : ob.expectedAmount;
   state.obligationInstances.push({
     id: uid(), obligationId: ob.id, period, expectedAmount: expected,
     paidAmount:0, remainingAmount: expected, dueDate, status:'pending'
@@ -741,6 +754,7 @@ function screenLogin(){
       <div class="field"><label>Nick</label><input id="li-nick" placeholder="Tu nombre de usuario" value="${state.user.nickname||''}"></div>
       <div class="field"><label>Contraseña</label><input id="li-pass" type="password" placeholder="Tu contraseña"></div>
       <button class="btn btn-primary" onclick="doLogin()">Ingresar</button>
+      ${state.onboardingDone?`<button class="btn btn-text" style="width:100%;margin-top:6px" onclick="openRecoverySheet()">¿Olvidaste tu contraseña?</button>`:''}
       ${!state.onboardingDone?`<button class="btn btn-text" style="width:100%;margin-top:10px" onclick="nav('onboarding',{step:0})">Crear cuenta nueva</button>`:`<button class="btn btn-text" style="width:100%;margin-top:10px;color:var(--critical)" onclick="confirmResetPrototype()">Reiniciar datos de prueba</button>`}
     </div>
   </div>`;
@@ -762,6 +776,53 @@ function resetPrototypeData(){
   showToast('Datos de prueba reiniciados');
   nav('login');
 }
+/* ======================= RECUPERACIÓN DE CONTRASEÑA / PIN ======================= */
+// ANKA no usa correo electrónico como credencial (decisión cerrada del MVP), así que la
+// recuperación se resuelve con una pregunta de seguridad configurada en el onboarding.
+// Si el usuario nunca la configuró (cuentas creadas antes de esta función), no hay forma
+// de recuperar de forma segura y se lo indicamos claramente en vez de fingir que sí.
+function openRecoverySheet(){
+  if(!hasRecoverySetup()){
+    openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Recuperar acceso</div>
+    <div class="sheet-sub">Esta cuenta no tiene una pregunta de seguridad configurada (fue creada antes de que existiera esta opción), así que no podemos verificar tu identidad de forma segura.</div>
+    <div class="help" style="margin-bottom:16px">Como ANKA guarda tus datos solo en este navegador y no usa correo, la única alternativa es reiniciar y empezar de nuevo. Esto borra los datos guardados en este dispositivo.</div>
+    <button class="btn btn-danger" onclick="closeSheet();confirmResetPrototype();">Reiniciar datos de prueba</button>`);
+    return;
+  }
+  uiTemp.recovery = {answered:false};
+  renderRecoverySheet();
+}
+function renderRecoverySheet(){
+  const r = uiTemp.recovery;
+  if(!r.answered){
+    openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Recuperar acceso</div>
+    <div class="sheet-sub">Responde tu pregunta de seguridad para continuar.</div>
+    <div class="field"><label>${state.user.securityQuestion}</label><input id="rec-answer" placeholder="Tu respuesta"></div>
+    <button class="btn btn-primary" onclick="verifyRecoveryAnswer()">Verificar</button>`);
+  } else {
+    openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Crea nuevos accesos</div>
+    <div class="sheet-sub">Identidad verificada. Define una nueva contraseña y un nuevo PIN.</div>
+    <div class="field"><label>Nueva contraseña</label><input id="rec-pass" type="password" placeholder="Mínimo 4 caracteres"></div>
+    <div class="field"><label>Nuevo PIN (4 dígitos)</label><input id="rec-pin" inputmode="numeric" maxlength="4" placeholder="Ej: 1234"></div>
+    <button class="btn btn-primary" onclick="saveRecovery()">Guardar y entrar</button>`);
+  }
+}
+function verifyRecoveryAnswer(){
+  const a=document.getElementById('rec-answer').value;
+  if(!securityAnswerMatches(a)){ showToast('La respuesta no coincide'); return; }
+  uiTemp.recovery.answered=true;
+  renderRecoverySheet();
+}
+function saveRecovery(){
+  const pass=document.getElementById('rec-pass').value;
+  const pin=document.getElementById('rec-pin').value;
+  if(!pass||pass.length<4){ showToast('La contraseña debe tener al menos 4 caracteres'); return; }
+  if(!/^\d{4}$/.test(pin)){ showToast('El PIN debe ser de 4 dígitos'); return; }
+  state.user.passwordHash=simpleHash(pass);
+  state.user.pinHash=simpleHash(pin);
+  saveState(); closeSheet(); showToast('Contraseña y PIN actualizados');
+  sessionUnlocked=true; ensureMonthInstances(state.currentPeriod); nav('home');
+}
 function screenPin(){
   const len=(uiTemp.pinBuffer||'').length;
   return `<div class="center-screen full-screen">
@@ -775,6 +836,7 @@ function screenPin(){
         <button class="pin-key" onclick="pinKey('0')">0</button>
         <button class="pin-key" onclick="pinKey('back')">⌫</button>
       </div>
+      <button class="btn btn-text" style="margin-top:6px" onclick="openRecoverySheet()">¿Olvidaste tu PIN?</button>
     </div>
   </div>`;
 }
@@ -794,16 +856,27 @@ function pinKey(k){
 
 /* ======================= ONBOARDING ======================= */
 const OB_STEPS=10;
+const SECURITY_QUESTIONS=[
+  '¿Cuál es el nombre de tu primera mascota?',
+  '¿En qué ciudad naciste?',
+  '¿Cuál es tu comida favorita?',
+  '¿Cómo se llamaba tu colegio de primaria?',
+  '¿Cuál es el segundo nombre de tu mamá?'
+];
 function screenOnboarding(){
   const step = uiTemp.step||0;
-  uiTemp.ob = uiTemp.ob || {nickname:'',password:'',currency:'COP',incomeFrequency:'mensual',incomeDay:1,incomeDay2:15,incomeAmount:0,budgetGeneral:0,quickObligations:[],pin:''};
+  uiTemp.ob = uiTemp.ob || {nickname:'',password:'',securityQuestion:'¿Cuál es el nombre de tu primera mascota?',securityAnswer:'',currency:'COP',incomeFrequency:'mensual',incomeDay:1,incomeDay2:15,incomeAmount:0,budgetGeneral:0,quickObligations:[],pin:''};
   const ob = uiTemp.ob;
   const dots = Array.from({length:OB_STEPS}).map((_,i)=>`<span class="${i<=step?'done':''}"></span>`).join('');
   let body='';
   if(step===0){
     body=`<div class="ob-mascot">👋</div><div class="ob-title">Bienvenido a ANKA</div><div class="ob-desc">Nada se te pasa. Te ayudamos a entender cuánto dinero puedes usar realmente, después de tus gastos, obligaciones y ahorro.</div>
     <div class="field"><label>¿Cómo te llamas? (nick)</label><input id="ob-nick" value="${ob.nickname}" placeholder="Ej: Miguel"></div>
-    <div class="field"><label>Crea una contraseña</label><input id="ob-pass" type="password" value="${ob.password}" placeholder="Mínimo 4 caracteres"></div>`;
+    <div class="field"><label>Crea una contraseña</label><input id="ob-pass" type="password" value="${ob.password}" placeholder="Mínimo 4 caracteres"></div>
+    <div class="field"><label>Pregunta de seguridad</label><select id="ob-secq">
+      ${SECURITY_QUESTIONS.map(q=>`<option value="${q}" ${ob.securityQuestion===q?'selected':''}>${q}</option>`).join('')}
+    </select><div class="help">La usaremos para ayudarte a recuperar tu contraseña o PIN si los olvidas. ANKA no usa correo electrónico, así que esta es tu única forma de recuperación.</div></div>
+    <div class="field"><label>Tu respuesta</label><input id="ob-seca" value="${ob.securityAnswer}" placeholder="Escribe tu respuesta"></div>`;
   } else if(step===1){
     body=`<div class="ob-title">¿En qué moneda manejas tu dinero?</div><div class="ob-desc">Podrás cambiarla luego desde Configuración.</div>
     <div class="chip-row" style="margin-top:12px">
@@ -826,12 +899,12 @@ function screenOnboarding(){
     const quinc = ob.incomeFrequency==='quincenal';
     body=`<div class="ob-title">${quinc?'Registra tu pago quincenal más reciente':'Registra tu ingreso principal'}</div>
     <div class="ob-desc">${quinc?'Este primer pago es obligatorio para comenzar. Si tu segundo pago del mes es de otro valor, podrás registrarlo tal cual cuando llegue; esto es solo para arrancar.':'Este primer ingreso es obligatorio para comenzar.'}</div>
-    <input data-money data-init="${ob.incomeAmount}" id="ob-income" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">
+    <input data-money data-init="${ob.incomeAmount}" id="ob-income" class="money-display" inputmode="numeric">
     ${quinc?`<div class="help" style="text-align:center">Asumimos que tu otro pago quincenal es similar, para proyectar tu ingreso del mes en ${formatMoneyCurrency(ob.incomeAmount*2,ob.currency)}.</div>`:''}`;
   } else if(step===4){
     const projected = ob.incomeFrequency==='quincenal' ? ob.incomeAmount*2 : ob.incomeAmount;
     body=`<div class="ob-title">Meta inicial de presupuesto</div><div class="ob-desc">Define una referencia general para este mes. Luego podrás distribuirla por categorías desde Presupuestos. No puede superar tu ingreso ${ob.incomeFrequency==='quincenal'?'mensual proyectado':'registrado'} (${formatMoneyCurrency(projected,ob.currency)}).</div>
-    <input data-money data-init="${ob.budgetGeneral}" id="ob-budget" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">`;
+    <input data-money data-init="${ob.budgetGeneral}" id="ob-budget" class="money-display" inputmode="numeric">`;
   } else if(step===5){
     const templates=['Arriendo','Internet','Celular','Parqueadero','Servicios públicos','Netflix','Spotify','Personalizada'];
     body=`<div class="ob-title">Obligaciones rápidas</div><div class="ob-desc">Selecciona las que apliquen. La primera es obligatoria para continuar.</div>
@@ -918,9 +991,12 @@ function obNext(){
   if(step===0){
     const nick=document.getElementById('ob-nick').value.trim();
     const pass=document.getElementById('ob-pass').value;
+    const secq=document.getElementById('ob-secq').value;
+    const seca=document.getElementById('ob-seca').value.trim();
     if(!nick){ showToast('Ingresa tu nick'); return; }
     if(!pass||pass.length<4){ showToast('La contraseña debe tener al menos 4 caracteres'); return; }
-    ob.nickname=nick; ob.password=pass;
+    if(!seca){ showToast('Responde la pregunta de seguridad para poder recuperar tu cuenta después'); return; }
+    ob.nickname=nick; ob.password=pass; ob.securityQuestion=secq; ob.securityAnswer=seca;
   } else if(step===2){
     const day=parseInt(document.getElementById('ob-day').value||'1',10);
     ob.incomeDay = Math.min(31,Math.max(1,day||1));
@@ -963,6 +1039,7 @@ function obPrev(){ uiTemp.step=Math.max(0,(uiTemp.step||0)-1); render(); }
 function finishOnboarding(){
   const ob=uiTemp.ob;
   state.user.nickname=ob.nickname; state.user.passwordHash=simpleHash(ob.password); state.user.pinHash=simpleHash(ob.pin);
+  state.user.securityQuestion=ob.securityQuestion; state.user.securityAnswerHash=simpleHash(normalizeAnswer(ob.securityAnswer));
   state.user.currency=ob.currency;
   state.user.incomeFrequency=ob.incomeFrequency;
   state.user.incomeDays = ob.incomeFrequency==='quincenal' ? [ob.incomeDay, ob.incomeDay2] : [ob.incomeDay];
@@ -1208,7 +1285,7 @@ function renderMovementSheet(){
   const cats=state.categories.filter(c=>c.type===f.type && c.isActive);
   openSheet(`<div class="sheet-handle"></div>
   <div class="sheet-title">${f.type==='income'?'Registrar ingreso':'Registrar gasto'}</div>
-  <input data-money data-init="${f.amount}" id="mv-amount" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">
+  <input data-money data-init="${f.amount}" id="mv-amount" class="money-display" inputmode="numeric">
   <div class="field"><label>Categoría</label><select id="mv-cat">${cats.map(c=>`<option value="${c.id}" ${f.categoryId===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('')}</select></div>
   <div class="field"><label>Descripción</label><input id="mv-desc" list="mv-desc-list" value="${f.description}" placeholder="Ej: Almuerzo, arriendo, salario...">
   <datalist id="mv-desc-list">${[...new Set(state.movements.map(m=>m.description))].map(d=>`<option value="${d}">`).join('')}</datalist></div>
@@ -1391,7 +1468,7 @@ function openConfirmPaymentSheet(instId){
   const inst = state.obligationInstances.find(i=>i.id===instId);
   const ob = oblById(inst.obligationId);
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Confirmar pago</div><div class="sheet-sub">${ob.name} · Saldo pendiente ${formatMoney(inst.remainingAmount)}</div>
-  <input data-money data-init="${inst.remainingAmount}" id="pay-amount" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">
+  <input data-money data-init="${inst.remainingAmount}" id="pay-amount" class="money-display" inputmode="numeric">
   <div class="field"><label>Fecha de pago</label><input type="date" id="pay-date" value="${todayISO()}"></div>
   <button class="btn btn-primary" onclick="confirmPayment('${instId}')">Confirmar pago</button>`);
 }
@@ -1407,9 +1484,11 @@ function confirmPayment(instId){
   inst.status = inst.remainingAmount<=0 ? 'paid' : 'partially_paid';
   state.movements.push({id:uid(),type:'expense',amount,categoryId:ob.categoryId,description:ob.name,date,note:'',sourceType:'obligation_payment',sourceId:inst.id,createdAt:Date.now()});
   if(ob.type==='loan' && ob.loan){
+    const insurance = ob.loan.insurance||0;
+    const loanPortion = Math.max(0, amount-insurance);
     const rate = ob.loan.monthlyRate;
     const interest = ob.loan.currentBalance*rate;
-    const principal = Math.min(ob.loan.currentBalance, Math.max(0, amount-interest));
+    const principal = Math.min(ob.loan.currentBalance, Math.max(0, loanPortion-interest));
     ob.loan.currentBalance = Math.max(0, ob.loan.currentBalance-principal);
     if(inst.status==='paid'){
       ob.loan.paidInstallments = (ob.loan.paidInstallments||0)+1;
@@ -1463,8 +1542,10 @@ function saveHistoricalPayment(){
     if(realBalance>0){
       ob.loan.currentBalance = Math.min(ob.loan.principal, realBalance);
     }else{
+      const insurance = ob.loan.insurance||0;
+      const loanPortion = Math.max(0, amount-insurance);
       const interest = Math.max(0, (ob.loan.currentBalance||0) * (ob.loan.monthlyRate||0));
-      const principalPaid = Math.min(ob.loan.currentBalance||0, Math.max(0, amount - interest));
+      const principalPaid = Math.min(ob.loan.currentBalance||0, Math.max(0, loanPortion - interest));
       ob.loan.currentBalance = Math.max(0, (ob.loan.currentBalance||0) - principalPaid);
     }
     if(!Number.isNaN(paidAccum) && paidAccum>=0){
@@ -1491,6 +1572,7 @@ function syncObFormFromDOM(){
   if(byId('ob-term')) f.term=parseInt(byId('ob-term').value||'0',10);
   if(byId('ob-ea')) f.ea=byId('ob-ea').value;
   if(byId('ob-installment')) f.installment=parseInt(byId('ob-installment').dataset.raw||'0',10);
+  if(byId('ob-insurance')) f.insurance=parseInt(byId('ob-insurance').dataset.raw||'0',10);
   if(byId('ob-first')) f.firstPaymentDate=byId('ob-first').value;
   f.reminderFiveDays = byId('ob-rem-5') ? byId('ob-rem-5').checked : f.reminderFiveDays;
   f.reminderDueDay = byId('ob-rem-due') ? byId('ob-rem-due').checked : f.reminderDueDay;
@@ -1509,7 +1591,7 @@ function newCategoryBlock(f){
 }
 /* Obligation form */
 function screenObligationForm(){
-  uiTemp.obForm = uiTemp.obForm || {type:'recurring', name:'', categoryId: uiTemp.presetCategoryId || state.categories.find(c=>c.type==='expense').id, newCategoryName:'', newCategoryIcon:'🧾', amount:0, dueDay:1, dueDate:todayISO(), principal:0, term:12, rateMode:'rate', ea:0, installment:0, firstPaymentDate:todayISO(), reminderFiveDays:true, reminderDueDay:true};
+  uiTemp.obForm = uiTemp.obForm || {type:'recurring', name:'', categoryId: uiTemp.presetCategoryId || state.categories.find(c=>c.type==='expense').id, newCategoryName:'', newCategoryIcon:'🧾', amount:0, dueDay:1, dueDate:todayISO(), principal:0, term:12, rateMode:'rate', ea:0, installment:0, insurance:0, firstPaymentDate:todayISO(), reminderFiveDays:true, reminderDueDay:true};
   const f=uiTemp.obForm;
   return `<div class="screen">${subHeader('Nueva obligación', "nav('obligations')")}
   <div class="tab-row">
@@ -1537,6 +1619,7 @@ function screenObligationForm(){
     ${f.rateMode==='rate'?`<div class="field"><label>Tasa efectiva anual (%)</label><input id="ob-ea" value="${f.ea}" inputmode="decimal"></div>`:
       `<div class="field"><label>Cuota mensual</label><input data-money data-init="${f.installment}" id="ob-installment" inputmode="numeric"></div>`}
     <div class="field"><label>Fecha del primer pago</label><input type="date" id="ob-first" value="${f.firstPaymentDate}"><div class="help">Puede ser del mes actual si esa cuota se debe pagar ahora.</div></div>
+    <div class="field"><label>Seguro mensual (opcional)</label><input data-money data-init="${f.insurance||0}" id="ob-insurance" inputmode="numeric"><div class="help">Algunos créditos incluyen un seguro obligatorio. Agrégalo aquí para que tu cuota total sea exacta; no afecta el cálculo de intereses ni la tabla de amortización, que se calculan solo sobre el crédito.</div></div>
   `:''}
   <button class="btn btn-primary" onclick="saveObligation()">Guardar obligación</button>
   </div>`;
@@ -1580,9 +1663,10 @@ function saveObligation(){
       monthlyRate=impliedMonthlyRate(principal,installment,term);
     }
     const firstPaymentDate=f.firstPaymentDate||todayISO();
-    const newOb={id:uid(),name,categoryId,type:'loan',expectedAmount:installment,frequency:'mensual',
+    const insurance=Math.max(0,parseInt(f.insurance||0,10));
+    const newOb={id:uid(),name,categoryId,type:'loan',expectedAmount:installment+insurance,frequency:'mensual',
       dueDay: parseInt(firstPaymentDate.slice(8,10),10), dueDate:null, startDate:todayISO(),endDate:null,isVariable:false,isActive:true, reminderFiveDays:true, reminderDueDay:true,
-      loan:{principal,term,monthlyRate,installment,firstPaymentDate,paidInstallments:0,currentBalance:principal,adjustments:[],nextInstallmentAmount:null}};
+      loan:{principal,term,monthlyRate,installment,insurance,firstPaymentDate,paidInstallments:0,currentBalance:principal,adjustments:[],nextInstallmentAmount:null}};
     state.obligations.push(newOb);
   }
   ensureMonthInstances(state.currentPeriod);
@@ -1599,21 +1683,26 @@ function screenObligationDetail(){
     const ea = Math.pow(1+ob.loan.monthlyRate,12)-1;
     const totalInterest = rows.reduce((s,r)=>s+r.interest,0);
     const totalPaidProjected = rows.reduce((s,r)=>s+r.payment,0);
+    const insurance = ob.loan.insurance||0;
     loanBlock = `<div class="card">
       <div class="section-title">Préstamo</div>
       <div class="breakdown" style="box-shadow:none;padding:0">
         <div class="row"><span>Capital inicial</span><span>${formatMoney(ob.loan.principal)}</span></div>
         <div class="row"><span>Saldo actual</span><span>${formatMoney(ob.loan.currentBalance)}</span></div>
-        <div class="row"><span>Cuota</span><span>${formatMoney(payment)}</span></div>
+        <div class="row"><span>Cuota (capital + interés)</span><span>${formatMoney(payment)}</span></div>
+        ${insurance>0?`<div class="row"><span>Seguro mensual</span><span>${formatMoney(insurance)}</span></div>
+        <div class="row total"><span>Cuota total a pagar</span><span>${formatMoney(payment+insurance)}</span></div>`:''}
         <div class="row"><span>Tasa mensual estimada</span><span>${(ob.loan.monthlyRate*100).toFixed(2)}%</span></div>
         <div class="row"><span>Tasa efectiva anual eq.</span><span>${(ea*100).toFixed(2)}%</span></div>
         <div class="row"><span>Cuotas pagadas</span><span>${ob.loan.paidInstallments||0} de ${ob.loan.term}</span></div>
-        <div class="row"><span>Total proyectado a pagar</span><span>${formatMoney(totalPaidProjected)}</span></div>
+        <div class="row"><span>Total proyectado a pagar</span><span>${formatMoney(totalPaidProjected+insurance*ob.loan.term)}</span></div>
         <div class="row total"><span>Total intereses proyectados</span><span>${formatMoney(totalInterest)}</span></div>
       </div>
       <div style="display:flex;gap:10px;margin-top:10px"><button class="btn btn-secondary btn-sm" style="flex:1" onclick="openExtraPaymentSheet('${ob.id}')">Abono extraordinario</button><button class="btn btn-secondary btn-sm" style="flex:1" onclick="openLoanAdjustSheet('${ob.id}')">Ajustar cuotas</button></div>
+      <button class="btn btn-text btn-sm" style="width:100%;margin-top:2px" onclick="openEditLoanInsurance('${ob.id}')">${insurance>0?'Editar seguro mensual':'Agregar seguro mensual'}</button>
       <div class="section-title" style="margin-top:16px;font-size:14px">Tabla de amortización</div>
       <div style="max-height:220px;overflow-y:auto">
+        <div class="help" style="margin:-6px 0 8px">La tabla muestra solo capital e interés del crédito${insurance>0?'; el seguro se paga aparte cada cuota y no se incluye aquí':''}.</div>
         <div class="amort-row" style="font-weight:700"><span>Cuota</span><span>Interés</span><span>Capital</span><span>Saldo</span></div>
         ${rows.map(r=>`<div class="amort-row ${r.n <= (ob.loan.paidInstallments||0) ? 'paid-installment' : ''}"><span>#${r.n}</span><span>${formatMoney(r.interest)}</span><span>${formatMoney(r.principal)}</span><span>${formatMoney(r.balance)}</span></div>`).join('')}
       </div>
@@ -1648,13 +1737,51 @@ function screenObligationDetail(){
     <button class="btn btn-secondary" onclick="confirmAction('${ob.isActive?'Pausar obligación':'Reactivar obligación'}','Puedes cambiar esto luego en cualquier momento.', ()=>toggleObligation('${ob.id}'))">${ob.isActive?'Pausar':'Reactivar'}</button>
     <button class="btn btn-danger" onclick="confirmAction('Finalizar obligación','No se generarán más cuotas futuras. Esta acción no elimina el historial.', ()=>finishObligation('${ob.id}'), true)">Finalizar</button>
   </div>
+  <button class="btn btn-text" style="color:var(--critical);margin-top:6px" onclick="confirmAction('Eliminar obligación','Esto elimina «${ob.name}» y sus fechas pendientes por completo. Los pagos que ya registraste quedan en tu historial de movimientos, pero dejarán de estar asociados a esta obligación. Esta acción no se puede deshacer.', ()=>deleteObligation('${ob.id}'), true)">Eliminar obligación por completo</button>
   </div>`;
+}
+function openEditLoanInsurance(obId){
+  const ob=oblById(obId); if(!ob || !ob.loan) return;
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Seguro mensual del préstamo</div>
+  <div class="sheet-sub">Se suma a la cuota que ves cada mes, pero no afecta el cálculo de intereses ni la tabla de amortización.</div>
+  <input data-money data-init="${ob.loan.insurance||0}" id="loan-insurance" class="money-display" inputmode="numeric">
+  <button class="btn btn-primary" style="margin-top:16px" onclick="saveLoanInsurance('${obId}')">Guardar</button>`);
+}
+function saveLoanInsurance(obId){
+  const ob=oblById(obId); if(!ob || !ob.loan) return;
+  const insurance=Math.max(0,parseInt(document.getElementById('loan-insurance').dataset.raw||'0',10));
+  ob.loan.insurance=insurance;
+  // Actualiza también la cuota pendiente del periodo actual si todavía no se ha pagado,
+  // para que el cambio se refleje de inmediato y no solo desde el próximo mes.
+  const currentInst = periodInstances(state.currentPeriod).find(i=>i.obligationId===obId && i.status!=='paid' && i.status!=='cancelled');
+  if(currentInst && currentInst.remainingAmount===currentInst.expectedAmount){
+    const newExpected = (ob.loan.nextInstallmentAmount!=null ? ob.loan.nextInstallmentAmount : ob.loan.installment) + insurance;
+    currentInst.expectedAmount = newExpected;
+    currentInst.remainingAmount = newExpected;
+  }
+  saveState(); closeSheet(); showToast('Seguro actualizado'); render();
 }
 function toggleObligation(id){ const ob=oblById(id); ob.isActive=!ob.isActive; saveState(); showToast('Actualizado'); render(); }
 function finishObligation(id){ const ob=oblById(id); ob.isActive=false; ob.endDate=todayISO(); saveState(); showToast('Obligación finalizada'); nav('obligations'); }
+function deleteObligation(id){
+  // Se elimina la obligación y sus cuotas/instancias (pasadas y futuras) para que no
+  // aparezca en listados ni en Comprometido. Los movimientos de pagos ya registrados NO se
+  // borran (son historial real de gasto), solo se desvincula su referencia a la obligación.
+  // OJO: los movimientos de tipo 'obligation_payment' guardan sourceId = id de la INSTANCIA
+  // (no de la obligación), mientras que 'debt_payment' (abonos extra) guardan sourceId = id
+  // de la obligación directamente. Hay que cubrir ambos casos.
+  const instanceIds = state.obligationInstances.filter(i=>i.obligationId===id).map(i=>i.id);
+  state.movements.forEach(m=>{
+    if(m.sourceType==='obligation_payment' && instanceIds.includes(m.sourceId)) m.sourceId=null;
+    if(m.sourceType==='debt_payment' && m.sourceId===id) m.sourceId=null;
+  });
+  state.obligationInstances = state.obligationInstances.filter(i=>i.obligationId!==id);
+  state.obligations = state.obligations.filter(o=>o.id!==id);
+  saveState(); showToast('Obligación eliminada'); nav('obligations');
+}
 function openExtraPaymentSheet(obId){
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Abono extraordinario</div><div class="sheet-sub">Elige qué prefieres optimizar</div>
-  <input data-money data-init="0" id="extra-amount" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">
+  <input data-money data-init="0" id="extra-amount" class="money-display" inputmode="numeric">
   <div class="chip-row"><button class="chip active" id="extra-mode-term" onclick="setExtraMode('term')">Reducir plazo</button><button class="chip" id="extra-mode-fee" onclick="setExtraMode('fee')">Reducir cuota</button></div>
   <button class="btn btn-primary" onclick="applyExtraPayment('${obId}')">Confirmar abono</button>`);
   uiTemp.extraMode='term';
@@ -1681,9 +1808,9 @@ function openLoanAdjustSheet(obId){
   const currentInst = periodInstances(state.currentPeriod).find(i=>i.obligationId===obId && i.status!=='paid' && i.status!=='cancelled');
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Ajustar cuotas</div><div class="sheet-sub">Úsalo si la deuda fue diferida a más cuotas, si la próxima cuota será mayor o si aparecen cuota de manejo u otros cargos.</div>
     <div class="field"><label>Nuevo plazo total en meses</label><input id="loan-new-term" inputmode="numeric" value="${ob.loan.term}"><div class="help">Aumenta este valor si la deuda fue diferida a más cuotas.</div></div>
-    <div class="field"><label>Valor especial del próximo pago</label><input data-money data-init="${currentInst?currentInst.remainingAmount:(ob.loan.nextInstallmentAmount||ob.loan.installment)}" id="loan-next-payment" inputmode="numeric"><div class="help">Permite registrar una cuota mayor por manejo, seguros u otros cargos.</div></div>
-    <div class="field"><label>Cargo adicional al saldo</label><input data-money data-init="0" id="loan-extra-charge" inputmode="numeric"><div class="help">Ejemplo: cuota de manejo, seguro, comisión o cargo financiero.</div></div>
-    <div class="field"><label>Motivo del ajuste</label><input id="loan-adjust-reason" placeholder="Ej: diferido a 24 cuotas, cuota de manejo, seguro"></div>
+    <div class="field"><label>Valor especial del próximo pago</label><input data-money data-init="${currentInst?currentInst.remainingAmount:(ob.loan.nextInstallmentAmount||ob.loan.installment+(ob.loan.insurance||0))}" id="loan-next-payment" inputmode="numeric"><div class="help">Reemplaza el cálculo automático de este pago. Si tienes seguro configurado, este valor debe incluirlo (no se suma aparte).</div></div>
+    <div class="field"><label>Cargo adicional al saldo</label><input data-money data-init="0" id="loan-extra-charge" inputmode="numeric"><div class="help">Ejemplo: cuota de manejo, comisión o cargo financiero que se sumó al saldo de la deuda. Si es un seguro mensual recurrente, edítalo desde el detalle del préstamo en vez de aquí.</div></div>
+    <div class="field"><label>Motivo del ajuste</label><input id="loan-adjust-reason" placeholder="Ej: diferido a 24 cuotas, cuota de manejo"></div>
     <button class="btn btn-primary" onclick="saveLoanAdjustment('${obId}')">Guardar ajuste</button>`);
 }
 function saveLoanAdjustment(obId){
@@ -1728,7 +1855,7 @@ function screenSavings(){
 function openGoalForm(){
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Nueva meta de ahorro</div>
   <div class="field"><label>Nombre</label><input id="goal-name" placeholder="Ej: Viaje, fondo de emergencia"></div>
-  <div class="field"><label>Valor que quieres alcanzar</label><input data-money data-init="0" id="goal-target" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%"><div class="help">Antes llamado valor objetivo.</div></div>
+  <div class="field"><label>Valor que quieres alcanzar</label><input data-money data-init="0" id="goal-target" class="money-display" inputmode="numeric"><div class="help">Antes llamado valor objetivo.</div></div>
   <div class="field"><label>Fecha objetivo (opcional)</label><input type="date" id="goal-date"></div>
   <button class="btn btn-primary" onclick="saveGoal()">Crear meta</button>`);
 }
@@ -1749,7 +1876,7 @@ function openContributionPicker(){
 function openContribution(goalId){
   const g=state.savingsGoals.find(x=>x.id===goalId);
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Aportar a ${g.name}</div>
-  <input data-money data-init="0" id="contrib-amount" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">
+  <input data-money data-init="0" id="contrib-amount" class="money-display" inputmode="numeric">
   <button class="btn btn-primary" onclick="saveContribution('${goalId}')">Aportar</button>`);
 }
 function saveContribution(goalId){
@@ -1764,7 +1891,7 @@ function saveContribution(goalId){
 function openWithdrawal(goalId){
   const g=state.savingsGoals.find(x=>x.id===goalId);
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Retirar de ${g.name}</div>
-  <input data-money data-init="0" id="wd-amount" class="money-display" inputmode="numeric" style="border:none;background:transparent;width:100%">
+  <input data-money data-init="0" id="wd-amount" class="money-display" inputmode="numeric">
   <div class="field"><label>Motivo (obligatorio)</label><input id="wd-reason" placeholder="¿Para qué usarás este dinero?"></div>
   <button class="btn btn-primary" onclick="saveWithdrawal('${goalId}')">Retirar del ahorro</button>`);
 }
@@ -1792,7 +1919,12 @@ function screenSavingDetail(){
   <div style="display:flex;gap:10px"><button class="btn btn-primary" onclick="openContribution('${g.id}')">Aportar</button><button class="btn btn-secondary" onclick="openWithdrawal('${g.id}')">Retirar</button></div>
   <div class="card" style="margin-top:16px"><div class="section-title">Movimientos de esta meta</div>
   ${related.length===0?'<div class="empty-state" style="padding:12px 0"><p>Sin movimientos todavía.</p></div>':related.map(m=>movementRow(m)).join('')}</div>
+  <button class="btn btn-text" style="color:var(--critical);margin-top:6px" onclick="confirmAction('Eliminar meta','${g.savedAmount>0?`Esta meta tiene ${formatMoney(g.savedAmount)} ahorrados. Al eliminarla, ese dinero vuelve a tu disponible (deja de estar apartado). `:''}Esta acción no se puede deshacer.', ()=>deleteGoal('${g.id}'), true)">Eliminar meta por completo</button>
   </div>`;
+}
+function deleteGoal(id){
+  state.savingsGoals = state.savingsGoals.filter(g=>g.id!==id);
+  saveState(); showToast('Meta eliminada, el dinero apartado vuelve a tu disponible'); nav('savings');
 }
 
 /* ======================= BUDGETS ======================= */
@@ -1966,6 +2098,7 @@ function screenSettings(){
     <div class="settings-row" onclick="editNick()"><div class="ic">👤</div><div class="lbl">Nick</div><div class="val">${u.nickname}</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="editPassword()"><div class="ic">🔒</div><div class="lbl">Cambiar contraseña</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="editPin()"><div class="ic">🔢</div><div class="lbl">Cambiar PIN</div>${icon('chevronR',16)}</div>
+    <div class="settings-row" onclick="openEditSecurityQuestion()"><div class="ic">🛟</div><div class="lbl">Pregunta de seguridad</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="editCurrency()"><div class="ic">💱</div><div class="lbl">Moneda</div><div class="val">${u.currency}</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="openIncomeScheduleEditor()"><div class="ic">📅</div><div class="lbl">Frecuencia y día(s) de ingreso</div><div class="val">${u.incomeFrequency==='quincenal'?'Quincenal · '+expectedIncomeDays().join(' y '):'Mensual · día '+u.primaryIncomeDay}</div>${icon('chevronR',16)}</div>
     <div class="settings-row"><div class="ic">🔔</div><div class="lbl">Notificaciones</div><div class="switch ${u.notificationsEnabled?'on':''}" onclick="toggleSetting('notificationsEnabled')"><div class="knob"></div></div></div>
@@ -1986,6 +2119,23 @@ function toggleSetting(key){ state.user[key]=!state.user[key]; saveState(); rend
 function editNick(){ const v=prompt('Nuevo nick:', state.user.nickname); if(v && v.trim()){ state.user.nickname=v.trim(); saveState(); render(); showToast('Nick actualizado'); } }
 function editPassword(){ const v=prompt('Nueva contraseña (mínimo 4 caracteres):'); if(v && v.length>=4){ state.user.passwordHash=simpleHash(v); saveState(); showToast('Contraseña actualizada'); } else if(v) showToast('Muy corta'); }
 function editPin(){ const v=prompt('Nuevo PIN (4 dígitos):'); if(v && /^\d{4}$/.test(v)){ state.user.pinHash=simpleHash(v); saveState(); showToast('PIN actualizado'); } else if(v) showToast('Debe ser exactamente 4 dígitos'); }
+function openEditSecurityQuestion(){
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Pregunta de seguridad</div>
+  <div class="sheet-sub">Se usa para recuperar tu contraseña o PIN si los olvidas. Debes escribir tu contraseña actual para cambiarla.</div>
+  <div class="field"><label>Pregunta</label><select id="secq-select">${SECURITY_QUESTIONS.map(q=>`<option value="${q}" ${state.user.securityQuestion===q?'selected':''}>${q}</option>`).join('')}</select></div>
+  <div class="field"><label>Nueva respuesta</label><input id="secq-answer" placeholder="Tu respuesta"></div>
+  <div class="field"><label>Confirma tu contraseña actual</label><input id="secq-pass" type="password" placeholder="Contraseña actual"></div>
+  <button class="btn btn-primary" onclick="saveSecurityQuestion()">Guardar</button>`);
+}
+function saveSecurityQuestion(){
+  const q=document.getElementById('secq-select').value;
+  const a=document.getElementById('secq-answer').value.trim();
+  const pass=document.getElementById('secq-pass').value;
+  if(!passwordMatches(pass)){ showToast('La contraseña actual no coincide'); return; }
+  if(!a){ showToast('Escribe una respuesta'); return; }
+  state.user.securityQuestion=q; state.user.securityAnswerHash=simpleHash(normalizeAnswer(a));
+  saveState(); closeSheet(); showToast('Pregunta de seguridad actualizada');
+}
 function editCurrency(){ state.user.currency = state.user.currency==='COP'?'USD':'COP'; saveState(); render(); showToast('Moneda cambiada a '+state.user.currency); }
 function openIncomeScheduleEditor(){
   uiTemp.incomeEdit = {
@@ -2101,6 +2251,24 @@ function exportExcel(){
   table+='</table>';
   download('anka_movimientos.xls', table, 'application/vnd.ms-excel');
   showToast('Excel exportado');
+}
+
+/* ======================= VIEWPORT REAL (teclado móvil) ======================= */
+// En navegadores móviles, innerHeight/100vh no se achica cuando aparece el teclado
+// (en iOS Safari nunca; en Android Chrome depende de la config). visualViewport.height
+// sí refleja el área realmente visible, así que lo usamos para --app-height: cuando el
+// teclado se abre, los contenedores en columna (.ob-wrap, .center-screen, etc.) se
+// encogen de verdad y el botón "Continuar" queda arriba del teclado en vez de tapado.
+function setAppHeight(){
+  const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', setAppHeight);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', setAppHeight);
+  window.visualViewport.addEventListener('scroll', setAppHeight);
 }
 
 /* ======================= BOOT ======================= */

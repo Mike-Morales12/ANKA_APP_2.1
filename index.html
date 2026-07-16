@@ -310,12 +310,12 @@ function icon(name, size){
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor">${I[name]||I.home}</svg>`;
 }
 function ankaLogo(size, color){
-  // Logo oficial de ANKA (confirmado): isotipo circular azul con montaña y punto.
+  // Logo oficial de ANKA: isotipo circular azul con silueta de montaña redondeada y punto.
   color = color || '#0D47A1';
   return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="50" cy="50" r="47" fill="none" stroke="${color}" stroke-width="6"/>
-    <path d="M22 62 L40 40 L52 54 L64 34 L80 62 Z" fill="${color}"/>
-    <circle cx="66" cy="30" r="6" fill="${color}"/>
+    <circle cx="50" cy="50" r="37" fill="none" stroke="${color}" stroke-width="6.5"/>
+    <path d="M 29 59 C 29 48, 32 41, 37 41 C 41 41, 43 45, 47 51 C 50 44, 54 32, 59 31 C 63 30, 66 34, 69 41 C 71 47, 72 53, 71.5 59 Z" fill="${color}"/>
+    <circle cx="60" cy="24" r="5.5" fill="${color}"/>
   </svg>`;
 }
 const CAT_ICONS = ['🏠','🛒','🚌','🎬','💡','📶','📱','🅿️','🩺','🎓','💳','🐷','✈️','🎁','🐾','☕','🧾','⚡','💧','🔧'];
@@ -741,7 +741,7 @@ const NAV_ITEMS=[
   {id:'savings',label:'Ahorros',icon:'piggy'},
 ];
 function renderBottomNav(){
-  const authScreens=['home','movements','obligations','savings','budgets','notifications','settings','movementDetail','savingDetail','backup','stats','categories','obligationCategory','available'];
+  const authScreens=['home','movements','obligations','savings','budgets','notifications','settings','movementDetail','savingDetail','backup','stats','categories','obligationCategory','obligationType','available'];
   const nv=document.getElementById('bottom-nav');
   if(!authScreens.includes(currentScreen)){ nv.style.display='none'; return; }
   nv.style.display='flex';
@@ -775,7 +775,7 @@ function render(){
     notifications: screenNotifications, settings: screenSettings,
     movementDetail: screenMovementDetail, savingDetail: screenSavingDetail,
     backup: screenBackup, stats: screenStats, categories: screenCategories, obligationForm: screenObligationForm,
-    obligationDetail: screenObligationDetail, obligationCategory: screenObligationCategory
+    obligationDetail: screenObligationDetail, obligationCategory: screenObligationCategory, obligationType: screenObligationType
   };
   root.innerHTML = (fns[currentScreen]||screenHome)();
   renderBottomNav();
@@ -1459,9 +1459,60 @@ function screenObligations(){
     <div class="progress-track"><div class="progress-fill" style="width:${insts.length?Math.round(paidCount/insts.length*100):0}%"></div></div>
     <button class="btn btn-text btn-sm" style="margin-top:10px;padding:4px 0" onclick="openHistoricalPaymentSheet()">Registrar pago histórico</button>
   </div>
-  <div class="tab-row"><button class="${uiTemp.obView==='list'?'active':''}" onclick="uiTemp.obView='list';render()">Lista</button><button class="${uiTemp.obView==='category'?'active':''}" onclick="uiTemp.obView='category';render()">Por categoría</button></div>
+  <div class="tab-row"><button class="${uiTemp.obView==='list'?'active':''}" onclick="uiTemp.obView='list';render()">Lista</button><button class="${uiTemp.obView==='category'?'active':''}" onclick="uiTemp.obView='category';render()">Por categoría</button><button class="${uiTemp.obView==='type'?'active':''}" onclick="uiTemp.obView='type';render()">Por tipo</button></div>
   ${uiTemp.obView==='list'?`<div class="chip-row">${[['all','Todas'],['pending','Pendientes'],['paid','Pagadas'],['overdue','Vencidas']].map(([k,l])=>`<button class="chip ${uiTemp.obFilter===k?'active':''}" onclick="uiTemp.obFilter='${k}';render()">${l}</button>`).join('')}</div>
-  <div class="card">${filtered.length===0?`<div class="empty-state"><div class="mascot">📅</div><p>Todavía no tienes obligaciones. Agrega tus pagos recurrentes para mantener todo bajo control.</p><button class="btn btn-primary btn-sm" onclick="nav('obligationForm')">Nueva obligación</button></div>`:filtered.map(i=>obligationCard(i)).join('')}</div>`:obligationCategoriesOverview()}
+  <div class="card">${filtered.length===0?`<div class="empty-state"><div class="mascot">📅</div><p>Todavía no tienes obligaciones. Agrega tus pagos recurrentes para mantener todo bajo control.</p><button class="btn btn-primary btn-sm" onclick="nav('obligationForm')">Nueva obligación</button></div>`:filtered.map(i=>obligationCard(i)).join('')}</div>`:uiTemp.obView==='category'?obligationCategoriesOverview():obligationTypesOverview()}
+  </div>`;
+}
+const OB_TYPE_LABELS = {recurring:['Recurrente','🔁'], one_time:['Pago único','🧾'], loan:['Préstamo','🏦']};
+function obligationTypesOverview(){
+  const period=state.currentPeriod;
+  const insts=periodInstances(period);
+  const rows=Object.keys(OB_TYPE_LABELS).map(type=>{
+    const obs=state.obligations.filter(o=>o.type===type && o.isActive);
+    if(obs.length===0) return null;
+    const typeInsts=insts.filter(i=>obs.some(o=>o.id===i.obligationId));
+    const pending=typeInsts.reduce((s,i)=>s+Math.max(0,i.remainingAmount),0);
+    const paid=typeInsts.reduce((s,i)=>s+i.paidAmount,0);
+    const overdueCount=typeInsts.filter(i=>i.status==='overdue').length;
+    const total=pending+paid;
+    const paidPct= total? Math.round(paid/total*100) : 0;
+    return {type,obs,pending,paid,overdueCount,paidPct};
+  }).filter(Boolean);
+  if(!rows.length) return `<div class="card empty-state"><p>No hay obligaciones activas para agrupar por tipo.</p></div>`;
+  rows.sort((a,b)=> (b.overdueCount>0)-(a.overdueCount>0) || b.pending-a.pending);
+  return rows.map(({type,obs,pending,paid,overdueCount,paidPct})=>{
+    const [label,ic]=OB_TYPE_LABELS[type];
+    return `<div class="card" onclick="nav('obligationType',{obType:'${type}'})" style="cursor:pointer;${overdueCount?'border:1.5px solid var(--critical)':''}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="position:relative;flex-shrink:0">
+          <div class="ic" style="width:44px;height:44px;border-radius:14px;background:var(--blue-50);color:var(--blue-900);display:flex;align-items:center;justify-content:center;font-size:22px">${ic}</div>
+          ${overdueCount?`<div style="position:absolute;top:-5px;right:-5px;background:var(--critical);color:#fff;font-size:10.5px;font-weight:700;border-radius:100px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff">${overdueCount}</div>`:''}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700">${label}</div>
+          <div style="font-size:12px;color:var(--text-700)">${obs.length} obligación(es)</div>
+        </div>
+        ${icon('chevronR',18)}
+      </div>
+      <div class="progress-track" style="margin-top:12px"><div class="progress-fill ${overdueCount?'critical':'success'}" style="width:${paidPct}%"></div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-top:6px">
+        <span style="color:var(--text-700)">Pagado ${formatMoney(paid)}</span>
+        ${overdueCount
+          ?`<span style="color:#B91C1C;font-weight:700">⚠ ${overdueCount} vencida(s) · ${formatMoney(pending)}</span>`
+          :`<span style="color:var(--text-700)">Pendiente ${formatMoney(pending)}</span>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+function screenObligationType(){
+  const type=uiTemp.obType; const [label]=OB_TYPE_LABELS[type]||['Obligaciones'];
+  const period=state.currentPeriod;
+  const obs=state.obligations.filter(o=>o.type===type);
+  const insts=periodInstances(period).filter(i=>obs.some(o=>o.id===i.obligationId));
+  return `<div class="screen">${subHeader(label, "nav('obligations')")}
+    <button class="btn btn-primary" style="margin-bottom:16px" onclick="nav('obligationForm',{presetType:'${type}'})">Agregar obligación de tipo ${label}</button>
+    <div class="card"><div class="section-title">Obligaciones · ${label}</div>${insts.length?insts.map(i=>obligationCard(i)).join(''):'<div class="empty-state" style="padding:12px 0"><p>No hay pagos de este tipo en el mes seleccionado.</p></div>'}</div>
   </div>`;
 }
 function obligationCategoriesOverview(){
@@ -1679,7 +1730,7 @@ function newCategoryBlock(f){
 }
 /* Obligation form */
 function screenObligationForm(){
-  uiTemp.obForm = uiTemp.obForm || {type:'recurring', name:'', categoryId: uiTemp.presetCategoryId || state.categories.find(c=>c.type==='expense').id, newCategoryName:'', newCategoryIcon:'🧾', amount:0, dueDay:1, dueDate:todayISO(), principal:0, term:12, rateMode:'rate', ea:0, installment:0, insurance:0, firstPaymentDate:todayISO(), reminderFiveDays:true, reminderDueDay:true};
+  uiTemp.obForm = uiTemp.obForm || {type: uiTemp.presetType || 'recurring', name:'', categoryId: uiTemp.presetCategoryId || state.categories.find(c=>c.type==='expense').id, newCategoryName:'', newCategoryIcon:'🧾', amount:0, dueDay:1, dueDate:todayISO(), principal:0, term:12, rateMode:'rate', ea:0, installment:0, insurance:0, firstPaymentDate:todayISO(), reminderFiveDays:true, reminderDueDay:true};
   const f=uiTemp.obForm;
   return `<div class="screen">${subHeader('Nueva obligación', "nav('obligations')")}
   <div class="tab-row">

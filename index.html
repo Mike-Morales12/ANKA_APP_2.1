@@ -49,6 +49,9 @@ a{color:inherit;}
 /* Cards */
 .card{background:#fff;border-radius:var(--r-card);padding:16px;box-shadow:var(--shadow);margin-bottom:16px;}
 .section-title{font-size:18px;font-weight:600;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;}
+.section-title.minor{font-size:15px;color:var(--text-700);}
+.form-group-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--blue-700);margin:20px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--gray-200);}
+.form-group-label:first-child{margin-top:4px;}
 .section-title small{font-size:13px;font-weight:500;color:var(--blue-700);font-family:'Inter';}
 
 /* Inputs */
@@ -146,7 +149,7 @@ a{color:inherit;}
 
 /* Bottom nav */
 #bottom-nav{position:fixed;left:0;right:0;bottom:0;max-width:430px;min-width:0;margin:0 auto;background:#fff;display:flex;align-items:center;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom));box-shadow:0 -2px 16px rgba(0,0,0,0.07);z-index:40;}
-.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;color:#9CA3AF;font-size:11px;font-weight:600;width:56px;padding:4px 0;}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;color:#6D7787;font-size:11px;font-weight:600;width:56px;padding:4px 0;}
 .nav-item.active{color:var(--blue-900);}
 .nav-item svg{width:22px;height:22px;}
 .nav-fab{width:56px;height:56px;border-radius:100px;background:var(--blue-900);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(13,71,161,0.4);margin-top:-26px;transition:transform .2s ease;flex-shrink:0;}
@@ -237,7 +240,7 @@ a{color:inherit;}
 .notif-item .t{font-size:11px;color:#9CA3AF;}
 
 .amort-row{display:flex;justify-content:space-between;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--gray-200);}
-.footer-brand{text-align:center;padding:28px 0 12px;color:#9CA3AF;font-size:11px;line-height:1.7;}
+.footer-brand{text-align:center;padding:28px 0 12px;color:#6D7787;font-size:11px;line-height:1.7;}
 .paid-installment{opacity:.55;text-decoration:line-through;}
 .cat-group-title{font-size:12px;font-weight:700;color:var(--text-700);text-transform:uppercase;margin:18px 0 6px;}
 </style>
@@ -652,11 +655,25 @@ function openModal(title, body, actions){
   document.getElementById('modal-overlay').classList.add('show');
 }
 function closeModal(){ document.getElementById('modal-overlay').classList.remove('show'); }
+let __confirmCallback = null;
 function confirmAction(title, body, onConfirm, danger){
+  // OJO: antes esto hacía onConfirm.toString() y lo reinyectaba como texto en un onclick,
+  // lo cual solo funciona si la función no depende de nada más que valores ya escritos
+  // literalmente en el HTML (como '${id}'). En cuanto un callback depende de una variable
+  // real en memoria (ej. el resultado de leer un archivo con FileReader), el texto
+  // reconstruido se ejecuta en un contexto global donde esa variable ya no existe, y
+  // truena con ReferenceError. Guardar la función real evita esa clase entera de bugs.
+  __confirmCallback = onConfirm;
   openModal(title, body, `
     <button class="btn btn-secondary btn-sm" style="flex:1" onclick="closeModal()">Cancelar</button>
-    <button class="btn ${danger?'btn-danger':'btn-primary'} btn-sm" style="flex:1" onclick="(${onConfirm.toString()})();closeModal();">Confirmar</button>
+    <button class="btn ${danger?'btn-danger':'btn-primary'} btn-sm" style="flex:1" onclick="runConfirmCallback()">Confirmar</button>
   `);
+}
+function runConfirmCallback(){
+  const cb = __confirmCallback;
+  __confirmCallback = null;
+  closeModal();
+  if(cb) cb();
 }
 
 /* ======================= SHEET ======================= */
@@ -1077,6 +1094,9 @@ function screenHome(){
   const disponible=getDisponibleHoy(period);
   const heroState = disponible>0? {t:'Disponible para organizar este mes', ic:'✅'} : disponible===0? {t:'No queda dinero libre después de tus compromisos', ic:'⚠️'} : {t:'Tus compromisos superan los ingresos registrados', ic:'🔴'};
   const insts = periodInstances(period).filter(i=>i.status!=='cancelled').sort((a,b)=> (statusOrder(a)-statusOrder(b)) || a.dueDate.localeCompare(b.dueDate));
+  const overdueInsts = insts.filter(i=>i.status==='overdue');
+  const overdueCount = overdueInsts.length;
+  const overdueSum = overdueInsts.reduce((s,i)=>s+i.remainingAmount,0);
   const paidCount = periodInstances(period).filter(i=>i.status==='paid').length;
   const totalCount = periodInstances(period).length;
   const genLimit = budgetGeneralLimit();
@@ -1110,21 +1130,22 @@ function screenHome(){
     <div class="support">Después de pagos pendientes y ahorro reservado</div>
     <div class="hero-state">${heroState.ic} ${heroState.t}</div>
   </div>
-  <div class="breakdown" onclick="nav('available')" style="cursor:pointer">
-    <div class="section-title" style="margin-bottom:6px">Desglose del disponible <small>Ver detalle</small></div>
-    <div class="row"><span>Ingresado</span><span>${maskedOrValue('+ '+formatMoney(ingresado))}</span></div>
-    <div class="row"><span>Gastado</span><span>${maskedOrValue('− '+formatMoney(gastado))}</span></div>
-    <div class="row"><span>Comprometido</span><span>${maskedOrValue('− '+formatMoney(comprometido))}</span></div>
-    <div class="row"><span>Ahorro apartado</span><span>${maskedOrValue('− '+formatMoney(ahorro))}</span></div>
-    <div class="row total"><span>Disponible hoy</span><span>${maskedOrValue(formatMoney(disponible))}</span></div>
-  </div>
 
-  <div class="grid2x2">
+  <div class="grid2x2" onclick="nav('available')" style="cursor:pointer">
     ${miniCard('Ingresado', ingresado, 'success','↓')}
     ${miniCard('Gastado', gastado, 'critical','↑')}
     ${miniCard('Comprometido', comprometido, 'warning','⏳')}
     ${miniCard('Ahorro apartado', ahorro, 'info','🐷')}
   </div>
+  <div style="text-align:center;margin:-8px 0 16px"><small style="font-size:12.5px;color:var(--blue-700);font-weight:600;cursor:pointer" onclick="nav('available')">Ver desglose completo</small></div>
+
+  ${overdueCount>0? `<div class="card" style="background:var(--critical-bg);box-shadow:none;cursor:pointer" onclick="nav('obligations')">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:22px">🔴</div>
+      <div style="flex:1"><div style="font-weight:600;font-size:14.5px;color:var(--critical)">${overdueCount} obligación${overdueCount===1?'':'es'} vencida${overdueCount===1?'':'s'}</div>
+      <div style="font-size:12.5px;color:var(--text-700)">Suman ${maskedOrValue(formatMoney(overdueSum))} pendientes de pago</div></div>
+    </div>
+  </div>` : ''}
 
   <div class="card">
     <div class="section-title">Pagos de este mes <small onclick="nav('obligations')">Ver todos</small></div>
@@ -1146,16 +1167,15 @@ function screenHome(){
   </div>
 
   <div class="card">
-    <div class="section-title">Últimos movimientos <small onclick="nav('movements')">Ver todos</small></div>
+    <div class="section-title minor">Últimos movimientos <small onclick="nav('movements')">Ver todos</small></div>
     ${recentMv.length===0? `<div class="empty-state" style="padding:20px 0"><p>Todavía no tienes movimientos. Registra tu primer ingreso o gasto para comenzar.</p></div>` :
       recentMv.map(m=>movementRow(m)).join('')}
   </div>
 
-  <div class="section-title" style="padding:0 2px">Metas de ahorro <small onclick="nav('savings')">Ver todas</small></div>
+  <div class="section-title minor" style="padding:0 2px">Metas de ahorro <small onclick="nav('savings')">Ver todas</small></div>
   ${goals.length===0? `<div class="card empty-state" style="padding:24px"><div class="mascot">🐷</div><p>Crea una meta para separar dinero con un propósito.</p><button class="btn btn-secondary btn-sm" onclick="openGoalForm()">Crear meta</button></div>` :
     `<div class="goal-strip">${goals.map(g=>goalCard(g)).join('')}</div>`}
 
-  <div class="footer-brand">ANKA<br>Producto: MVP 1.0 · Prototipo HTML: v1.4.4 Beta cerrada<br>UX/UI: v1.4.0 · By: Miguel Morales<br>Nada se te pasa.</div>
   </div>`;
 }
 function statusOrder(i){ return {overdue:0,pending:1,partially_paid:1}[i.status] ?? 2; }
@@ -1613,12 +1633,17 @@ function screenObligationForm(){
     <div class="field"><label>Fecha de vencimiento</label><input type="date" id="ob-date" value="${f.dueDate}"><div class="help">Selecciona la fecha límite real del pago.</div></div>
   `:''}
   ${f.type==='loan'?`
+    <div class="form-group-label">Datos del crédito</div>
     <div class="field"><label>Capital inicial</label><input data-money data-init="${f.principal}" id="ob-principal" inputmode="numeric"></div>
     <div class="field"><label>Plazo (meses)</label><input id="ob-term" value="${f.term}" inputmode="numeric"></div>
     <div class="chip-row"><button class="chip ${f.rateMode==='rate'?'active':''}" onclick="setObRateMode('rate')">Conozco la tasa</button><button class="chip ${f.rateMode==='installment'?'active':''}" onclick="setObRateMode('installment')">Conozco la cuota</button></div>
     ${f.rateMode==='rate'?`<div class="field"><label>Tasa efectiva anual (%)</label><input id="ob-ea" value="${f.ea}" inputmode="decimal"></div>`:
       `<div class="field"><label>Cuota mensual</label><input data-money data-init="${f.installment}" id="ob-installment" inputmode="numeric"></div>`}
+
+    <div class="form-group-label">Primer pago</div>
     <div class="field"><label>Fecha del primer pago</label><input type="date" id="ob-first" value="${f.firstPaymentDate}"><div class="help">Puede ser del mes actual si esa cuota se debe pagar ahora.</div></div>
+
+    <div class="form-group-label">Cargos opcionales</div>
     <div class="field"><label>Seguro mensual (opcional)</label><input data-money data-init="${f.insurance||0}" id="ob-insurance" inputmode="numeric"><div class="help">Algunos créditos incluyen un seguro obligatorio. Agrégalo aquí para que tu cuota total sea exacta; no afecta el cálculo de intereses ni la tabla de amortización, que se calculan solo sobre el crédito.</div></div>
   `:''}
   <button class="btn btn-primary" onclick="saveObligation()">Guardar obligación</button>
@@ -2116,9 +2141,52 @@ function screenSettings(){
   </div>`;
 }
 function toggleSetting(key){ state.user[key]=!state.user[key]; saveState(); render(); }
-function editNick(){ const v=prompt('Nuevo nick:', state.user.nickname); if(v && v.trim()){ state.user.nickname=v.trim(); saveState(); render(); showToast('Nick actualizado'); } }
-function editPassword(){ const v=prompt('Nueva contraseña (mínimo 4 caracteres):'); if(v && v.length>=4){ state.user.passwordHash=simpleHash(v); saveState(); showToast('Contraseña actualizada'); } else if(v) showToast('Muy corta'); }
-function editPin(){ const v=prompt('Nuevo PIN (4 dígitos):'); if(v && /^\d{4}$/.test(v)){ state.user.pinHash=simpleHash(v); saveState(); showToast('PIN actualizado'); } else if(v) showToast('Debe ser exactamente 4 dígitos'); }
+function editNick(){
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Cambiar nick</div>
+  <div class="sheet-sub">Así te saludamos en el Dashboard.</div>
+  <div class="field"><label>Nick</label><input id="nick-input" value="${state.user.nickname}" placeholder="Tu nombre de usuario"></div>
+  <button class="btn btn-primary" onclick="saveNick()">Guardar</button>`);
+}
+function saveNick(){
+  const v=document.getElementById('nick-input').value.trim();
+  if(!v){ showToast('El nick no puede estar vacío'); return; }
+  state.user.nickname=v; saveState(); closeSheet(); render(); showToast('Nick actualizado');
+}
+function editPassword(){
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Cambiar contraseña</div>
+  <div class="sheet-sub">Ingresa tu contraseña actual y la nueva.</div>
+  <div class="field"><label>Contraseña actual</label><input id="pw-current" type="password" placeholder="Contraseña actual"></div>
+  <div class="field"><label>Nueva contraseña</label><input id="pw-new" type="password" placeholder="Mínimo 4 caracteres"></div>
+  <button class="btn btn-primary" onclick="savePassword()">Guardar</button>`);
+}
+function savePassword(){
+  const current=document.getElementById('pw-current').value;
+  const next=document.getElementById('pw-new').value;
+  if(!passwordMatches(current)){ showToast('La contraseña actual no coincide'); return; }
+  if(!next||next.length<4){ showToast('La nueva contraseña debe tener al menos 4 caracteres'); return; }
+  state.user.passwordHash=simpleHash(next); saveState(); closeSheet(); showToast('Contraseña actualizada');
+}
+function editPin(){
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Cambiar PIN</div>
+  <div class="sheet-sub">Este PIN se usa para entrar a ANKA cada día.</div>
+  <div class="field"><label>Nuevo PIN (4 dígitos)</label><input id="pin-new" inputmode="numeric" maxlength="4" placeholder="Ej: 1234"></div>
+  <button class="btn btn-primary" onclick="savePin()">Guardar</button>`);
+}
+function savePin(){
+  const v=document.getElementById('pin-new').value;
+  if(!/^\d{4}$/.test(v)){ showToast('El PIN debe ser de 4 dígitos'); return; }
+  state.user.pinHash=simpleHash(v); saveState(); closeSheet(); showToast('PIN actualizado');
+}
+function editCurrency(){
+  const other = state.user.currency==='COP'?'USD':'COP';
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Cambiar moneda</div>
+  <div class="sheet-sub">Tu moneda actual es <b>${state.user.currency}</b>. Cambiar a <b>${other}</b> solo afecta cómo se muestran los montos desde ahora; los números que ya registraste no se convierten automáticamente.</div>
+  <button class="btn btn-primary" onclick="saveCurrency('${other}')">Cambiar a ${other}</button>
+  <button class="btn btn-text" onclick="closeSheet()">Cancelar</button>`);
+}
+function saveCurrency(c){
+  state.user.currency=c; saveState(); closeSheet(); render(); showToast('Moneda cambiada a '+c);
+}
 function openEditSecurityQuestion(){
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Pregunta de seguridad</div>
   <div class="sheet-sub">Se usa para recuperar tu contraseña o PIN si los olvidas. Debes escribir tu contraseña actual para cambiarla.</div>
@@ -2136,7 +2204,6 @@ function saveSecurityQuestion(){
   state.user.securityQuestion=q; state.user.securityAnswerHash=simpleHash(normalizeAnswer(a));
   saveState(); closeSheet(); showToast('Pregunta de seguridad actualizada');
 }
-function editCurrency(){ state.user.currency = state.user.currency==='COP'?'USD':'COP'; saveState(); render(); showToast('Moneda cambiada a '+state.user.currency); }
 function openIncomeScheduleEditor(){
   uiTemp.incomeEdit = {
     frequency: state.user.incomeFrequency||'mensual',
@@ -2231,11 +2298,40 @@ function restoreBackup(ev){
   const file=ev.target.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=()=>{
+    let parsed;
+    try{
+      parsed = JSON.parse(reader.result);
+    }catch(e){
+      console.error('Backup JSON parse error', e);
+      showToast('El archivo no es un JSON válido. Verifica que sea el .json exportado por ANKA.');
+      ev.target.value='';
+      return;
+    }
+    if(!parsed || typeof parsed!=='object' || !parsed.user || !Array.isArray(parsed.movements)){
+      showToast('Este archivo no tiene el formato de un respaldo de ANKA.');
+      ev.target.value='';
+      return;
+    }
     confirmAction('Restaurar respaldo','Esto reemplazará todos tus datos actuales. ¿Deseas continuar?', ()=>{
-      try{ state=JSON.parse(reader.result); saveState(); showToast('Respaldo restaurado'); nav('home'); }
-      catch(e){ showToast('El archivo no es válido'); }
+      try{
+        state = parsed;
+        // Se migra y normaliza de inmediato y de forma síncrona (en vez de dejarlo en manos
+        // del guardado con debounce de saveState) para que la pantalla de inicio no intente
+        // pintarse con un estado a medio completar justo después de restaurar.
+        migrateSecurityFields();
+        normalizeState();
+        localStorage.setItem('anka_state', JSON.stringify(state));
+        sessionUnlocked = true;
+        showToast('Respaldo restaurado');
+        nav('home');
+      }catch(e){
+        console.error('Backup restore error', e);
+        showToast('El archivo es un JSON válido pero no se pudo aplicar: '+(e.message||'error desconocido'));
+      }
+      ev.target.value='';
     }, true);
   };
+  reader.onerror=()=>{ showToast('No se pudo leer el archivo. Intenta de nuevo.'); };
   reader.readAsText(file);
 }
 function exportCSV(){

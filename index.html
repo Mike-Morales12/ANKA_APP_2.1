@@ -310,7 +310,7 @@ function icon(name, size){
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor">${I[name]||I.home}</svg>`;
 }
 function ankaLogo(size, color){
-  /* TODO: Reemplazar por logo Panorama claro (#4) */
+  // Logo oficial de ANKA (confirmado): isotipo circular azul con montaña y punto.
   color = color || '#0D47A1';
   return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
     <circle cx="50" cy="50" r="47" fill="none" stroke="${color}" stroke-width="6"/>
@@ -1142,6 +1142,10 @@ function screenHome(){
   ensureMonthInstances(period);
   const ingresado=getIngresado(period), gastado=getGastado(period), comprometido=getComprometido(period), ahorro=getAhorroApartado();
   const disponible=getDisponibleHoy(period);
+  // Saldo real en cuenta: a diferencia de "Disponible hoy", NO descuenta comprometido
+  // (obligaciones pendientes de pago) porque ese dinero todavía no ha salido de la cuenta
+  // del usuario. Sí descuenta gastado y ahorro apartado porque ese sí ya no está disponible.
+  const saldoReal = ingresado - gastado - ahorro;
   const heroState = disponible>0? {t:'Disponible para organizar este mes', ic:'✅'} : disponible===0? {t:'No queda dinero libre después de tus compromisos', ic:'⚠️'} : {t:'Tus compromisos superan los ingresos registrados', ic:'🔴'};
   const insts = periodInstances(period).filter(i=>i.status!=='cancelled').sort((a,b)=> (statusOrder(a)-statusOrder(b)) || a.dueDate.localeCompare(b.dueDate));
   const overdueInsts = insts.filter(i=>i.status==='overdue');
@@ -1182,9 +1186,9 @@ function screenHome(){
       <div class="hero-state">${heroState.ic} ${heroState.t}</div>
     </div>
     <div class="hero-card hero-card-alt">
-      <div class="label">Sueldo total del mes</div>
-      <div class="amount">${maskedOrValue(formatMoney(ingresado))}</div>
-      <div class="support">Todo lo que ingresó, sin descontar todavía tus compromisos pendientes, lo gastado ni el ahorro apartado</div>
+      <div class="label">Saldo real en cuenta</div>
+      <div class="amount">${maskedOrValue(formatMoney(saldoReal))}</div>
+      <div class="support">Lo que deberías tener hoy en tu cuenta: ya se descontó lo gastado y el ahorro apartado, pero no tus compromisos pendientes (esos aún no han salido de ahí)</div>
     </div>
   </div>
   <div class="hero-dots" id="hero-dots"><span class="dot active"></span><span class="dot"></span></div>

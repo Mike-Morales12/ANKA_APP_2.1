@@ -121,6 +121,9 @@ a{color:inherit;}
 .month-selector button{width:34px;height:34px;border-radius:100px;display:flex;align-items:center;justify-content:center;}
 .month-selector button:active{background:var(--blue-50);}
 .month-selector span{font-weight:600;text-transform:capitalize;font-size:14px;}
+.pay-cycle-bar{margin:-6px 0 16px;padding:2px 4px;}
+.pay-cycle-bar .txt{font-size:12.5px;color:var(--text-700);margin-bottom:6px;text-align:center;}
+.pay-cycle-bar .progress-track{height:5px;}
 
 /* hero available card */
 .hero-card{background:linear-gradient(135deg,var(--blue-900),var(--blue-700));border-radius:var(--r-card);padding:22px 20px;color:#fff;margin-bottom:16px;position:relative;overflow:hidden;}
@@ -328,7 +331,57 @@ let uiTemp = {}; // transient form state per sheet/screen
 let sessionUnlocked = false;
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
-function currentPeriodStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function isoAddDays(dateISO, n){
+  const d = new Date(dateISO+'T12:00:00');
+  d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function daysInMonth(year, month){ return new Date(year, month, 0).getDate(); } // month: 1-12
+// El "periodo financiero" ya no es el mes calendario: arranca en cada día de pago que el
+// usuario registró (uno para mensual, dos para quincenal) y corre hasta el día antes del
+// siguiente pago. La clave del periodo es la fecha ISO en que arranca (ej. "2026-06-21"),
+// lo cual además la hace ordenable con simple comparación de texto.
+function payAnchorsInMonth(year, month, incomeDays){
+  const days = [...new Set((incomeDays||[1]).map(d=>Math.min(Math.max(parseInt(d,10)||1,1), daysInMonth(year,month))))].sort((a,b)=>a-b);
+  return days.map(d=> year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
+}
+function nextPayAnchorAfter(dateISO, incomeDays){
+  let [y,m] = dateISO.split('-').map(Number);
+  for(let i=0;i<25;i++){
+    const found = payAnchorsInMonth(y,m,incomeDays).find(a=>a>dateISO);
+    if(found) return found;
+    m++; if(m>12){m=1;y++;}
+  }
+  return dateISO;
+}
+function prevPayAnchorOnOrBefore(dateISO, incomeDays){
+  let [y,m] = dateISO.split('-').map(Number);
+  for(let i=0;i<25;i++){
+    const candidates = payAnchorsInMonth(y,m,incomeDays).filter(a=>a<=dateISO);
+    if(candidates.length) return candidates[candidates.length-1];
+    m--; if(m<1){m=12;y--;}
+  }
+  return dateISO;
+}
+function periodForDate(dateISO, incomeDays){ return prevPayAnchorOnOrBefore(dateISO, incomeDays||[1]); }
+function periodEndDate(period, incomeDays){ return isoAddDays(nextPayAnchorAfter(period, incomeDays||[1]), -1); }
+function currentIncomeDays(){ return (typeof state!=='undefined' && state && state.user && state.user.incomeDays && state.user.incomeDays.length) ? state.user.incomeDays : [1]; }
+function currentPeriodStr(){ return periodForDate(todayISO(), currentIncomeDays()); }
+// Progreso del ciclo de pago actual: cuánto ha avanzado y cuántos días faltan para el
+// próximo pago. Se calcula sobre el periodo en el que está hoy realmente (no el que esté
+// seleccionado en el selector de arriba, que el usuario puede haber movido para ver meses
+// pasados/futuros) — la barra siempre habla del "ahora", no de lo que se está mirando.
+function payCycleProgress(){
+  const days = currentIncomeDays();
+  const period = periodForDate(todayISO(), days);
+  const end = periodEndDate(period, days);
+  const nextPayday = isoAddDays(end,1);
+  const totalDays = Math.round((new Date(end+'T12:00:00') - new Date(period+'T12:00:00'))/86400000) + 1;
+  const elapsedDays = Math.round((new Date(todayISO()+'T12:00:00') - new Date(period+'T12:00:00'))/86400000) + 1;
+  const daysLeft = Math.round((new Date(nextPayday+'T12:00:00') - new Date(todayISO()+'T12:00:00'))/86400000);
+  const pct = Math.min(100, Math.max(0, Math.round(elapsedDays/totalDays*100)));
+  return {pct, daysLeft, nextPayday, totalDays};
+}
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
 function defaultState(){
@@ -438,8 +491,13 @@ function fmtDateRel(dateStr){
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 function periodLabel(p){
-  const [y,m]=p.split('-'); const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  return months[parseInt(m)-1]+' '+y;
+  const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const end = periodEndDate(p, currentIncomeDays());
+  const [sy,sm,sd]=p.split('-').map(Number);
+  const [ey,em,ed]=end.split('-').map(Number);
+  const startTxt = sy===ey ? `${sd} ${months[sm-1]}` : `${sd} ${months[sm-1]} ${sy}`;
+  const endTxt = `${ed} ${months[em-1]}`;
+  return `${startTxt} – ${endTxt}`;
 }
 // Live money input masking
 function attachMoneyMask(input, initialCents){
@@ -538,7 +596,10 @@ function attachDayMask(input){
 }
 
 /* ======================= CALCULATIONS ======================= */
-function periodMovements(period){ return state.movements.filter(m=>m.date.slice(0,7)===period); }
+function periodMovements(period){
+  const end = periodEndDate(period, currentIncomeDays());
+  return state.movements.filter(m=>m.date>=period && m.date<=end);
+}
 function getIngresado(period){ return periodMovements(period).filter(m=>m.type==='income' && m.sourceType!=='saving_withdrawal').reduce((s,m)=>s+m.amount,0); }
 function getGastado(period){ return periodMovements(period).filter(m=>m.type==='expense' && m.sourceType!=='saving_contribution').reduce((s,m)=>s+m.amount,0); }
 function periodInstances(period){ return state.obligationInstances.filter(i=>i.period===period); }
@@ -569,24 +630,33 @@ function getDisponibleHoy(period){
 }
 function catById(id){ return state.categories.find(c=>c.id===id); }
 function oblById(id){ return state.obligations.find(o=>o.id===id); }
-function lastDayOfPeriod(period){
-  const [y,m]=period.split('-').map(Number);
-  return new Date(y,m,0).getDate();
-}
+function clampDayInMonth(year, month, day){ return Math.min(Math.max(parseInt(day||1,10),1), daysInMonth(year,month)); }
 function dueDateForPeriod(period, day){
-  const safeDay = Math.min(Math.max(parseInt(day||1,10),1), lastDayOfPeriod(period));
-  return period+'-'+String(safeDay).padStart(2,'0');
+  // Un periodo puede cruzar dos meses calendario (ej. 21 jun - 20 jul). "day" es un día
+  // del mes (ej. 5), así que probamos primero en el mes de inicio del periodo y, si esa
+  // fecha no cae dentro del rango del periodo, probamos en el mes de cierre.
+  const end = periodEndDate(period, currentIncomeDays());
+  const [sy,sm] = period.split('-').map(Number);
+  const [ey,em] = end.split('-').map(Number);
+  let candidate = sy+'-'+String(sm).padStart(2,'0')+'-'+String(clampDayInMonth(sy,sm,day)).padStart(2,'0');
+  if(candidate>=period && candidate<=end) return candidate;
+  candidate = ey+'-'+String(em).padStart(2,'0')+'-'+String(clampDayInMonth(ey,em,day)).padStart(2,'0');
+  if(candidate>=period && candidate<=end) return candidate;
+  return end; // no debería pasar, pero nunca deja la fecha fuera del periodo
 }
 function periodCompare(a,b){ return a.localeCompare(b); }
 function periodOffset(period, n){
-  let [y,m]=period.split('-').map(Number);
-  m+=n; while(m<1){m+=12;y--;} while(m>12){m-=12;y++;}
-  return y+'-'+String(m).padStart(2,'0');
+  const days = currentIncomeDays();
+  let p = period;
+  if(n>0){ for(let i=0;i<n;i++) p = nextPayAnchorAfter(p, days); }
+  else if(n<0){ for(let i=0;i<-n;i++) p = prevPayAnchorOnOrBefore(isoAddDays(p,-1), days); }
+  return p;
 }
 function earliestPeriodForObligation(ob){
-  if(ob.type==='one_time') return ob.dueDate?ob.dueDate.slice(0,7):null;
-  if(ob.type==='loan') return (ob.loan && ob.loan.firstPaymentDate)?ob.loan.firstPaymentDate.slice(0,7):null;
-  return ob.startDate?ob.startDate.slice(0,7):null;
+  const days = currentIncomeDays();
+  if(ob.type==='one_time') return ob.dueDate ? periodForDate(ob.dueDate, days) : null;
+  if(ob.type==='loan') return (ob.loan && ob.loan.firstPaymentDate) ? periodForDate(ob.loan.firstPaymentDate, days) : null;
+  return ob.startDate ? periodForDate(ob.startDate, days) : null;
 }
 function ensureInstanceForPeriod(ob, period){
   const exists = state.obligationInstances.find(i=>i.obligationId===ob.id && i.period===period);
@@ -1155,7 +1225,7 @@ function finishOnboarding(){
   ensureMonthInstances(state.currentPeriod);
   saveState();
   sessionUnlocked=true;
-  nav('home');
+  navReset('home');
 }
 
 /* ======================= HOME / DASHBOARD ======================= */
@@ -1168,6 +1238,7 @@ function greeting(){
 function screenHome(){
   const period=state.currentPeriod;
   ensureMonthInstances(period);
+  const payCycle = payCycleProgress();
   const ingresado=getIngresado(period), gastado=getGastado(period), comprometido=getComprometido(period), ahorro=getAhorroApartado();
   const disponible=getDisponibleHoy(period);
   // Saldo real en cuenta: a diferencia de "Disponible hoy", NO descuenta comprometido
@@ -1203,6 +1274,10 @@ function screenHome(){
     <button onclick="cycleMonth(-1)">${icon('back',16)}</button>
     <span>${periodLabel(period)}</span>
     <button onclick="cycleMonth(1)" style="transform:scaleX(-1)">${icon('back',16)}</button>
+  </div>
+  <div class="pay-cycle-bar">
+    <div class="txt">${payCycle.daysLeft<=0?'Tu próximo pago es hoy':payCycle.daysLeft===1?'Falta 1 día para tu próximo pago':`Faltan ${payCycle.daysLeft} días para tu próximo pago`}</div>
+    <div class="progress-track"><div class="progress-fill" style="width:${payCycle.pct}%"></div></div>
   </div>
 
   <div class="hero-scroll" id="hero-scroll" onscroll="updateHeroDots()">
@@ -1310,9 +1385,7 @@ function updateHeroDots(){
   [...dotsEl.children].forEach((d,i)=>d.classList.toggle('active', i===idx));
 }
 function cycleMonth(dir){
-  let [y,m]=state.currentPeriod.split('-').map(Number);
-  m+=dir; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
-  state.currentPeriod = y+'-'+String(m).padStart(2,'0');
+  state.currentPeriod = periodOffset(state.currentPeriod, dir);
   ensureMonthInstances(state.currentPeriod);
   saveState(); render();
 }
@@ -2183,8 +2256,7 @@ function screenStats(){
   const total=Object.values(catSpend).reduce((a,b)=>a+b,0)||1;
   const sorted=Object.entries(catSpend).sort((a,b)=>b[1]-a[1]);
   const ingresado=getIngresado(period), gastado=getGastado(period);
-  const [py,pm]=period.split('-').map(Number); let py2=py,pm2=pm-1; if(pm2<1){pm2=12;py2--;}
-  const prevPeriod=py2+'-'+String(pm2).padStart(2,'0');
+  const prevPeriod=periodOffset(period,-1);
   const prevGastado=getGastado(prevPeriod);
   return `<div class="screen">${subHeader('Estadísticas', "nav('settings')")}
   <div class="card"><div class="section-title">Gastos por categoría</div>
@@ -2228,18 +2300,13 @@ function computeNotifications(){
   });
   const ingreso=getIngresado(period), usado=getGastado(period)+getComprometido(period)+getAhorroApartado();
   if(ingreso>0 && usado/ingreso>=0.8) notifs.push({id:'avail80-'+period,title:'Atención: 80% del dinero comprometido',body:'Ya usaste o comprometiste al menos el 80% de tus ingresos del mes.',type:'budget',relatedId:null,date:todayISO(),action:'available'});
-  // Recordatorio de ingresos por día de pago esperado. Con un solo ingreso mensual esto
-  // equivale a la lógica anterior; con dos pagos quincenales, sigue avisando del segundo
-  // pago aunque el primero ya se haya registrado (antes dejaba de avisar apenas
-  // getIngresado(period) pasaba de 0, sin importar si faltaba el segundo pago).
-  const incomeCountThisPeriod = periodMovements(period).filter(m=>m.type==='income' && m.sourceType!=='saving_withdrawal').length;
-  const todayDay = parseInt(todayISO().slice(8,10),10);
-  expectedIncomeDays().forEach((payDay,idx)=>{
-    if(todayDay>=payDay && incomeCountThisPeriod<=idx){
-      const ordinal = expectedIncomeDays().length>1 ? (idx===0?'primer':'segundo')+' pago quincenal' : 'ingreso';
-      notifs.push({id:'income-'+period+'-'+idx,title:'Registra tu '+ordinal,body:`Ya deberías haber recibido tu ${ordinal} de este mes (día ${payDay}). Regístralo para mantener tu disponible al día.`,type:'income',relatedId:null,date:todayISO(),action:'movements'});
-    }
-  });
+  // Recordatorio de ingreso: como cada periodo ahora arranca justo el día de pago, avisar
+  // es simplemente "¿ya registraste el ingreso de este periodo?" — no hace falta la lógica
+  // anterior de "cuál de los dos pagos del mes" porque quincenal ahora tiene un periodo
+  // propio por cada pago, no uno compartido.
+  if(getIngresado(period)===0){
+    notifs.push({id:'income-'+period, title:'Registra tu ingreso', body:`Tu periodo actual empezó el ${fmtDateRel(period)} y todavía no tienes ingresos registrados. Regístralo para mantener tu disponible al día.`, type:'income', relatedId:null, date:todayISO(), action:'movements'});
+  }
   // Recordatorio de respaldo. ANKA guarda todo solo en este navegador (sin nube), así que
   // un respaldo desactualizado es el escenario real de "perderlo todo" del MVP actual.
   const daysSinceBackup = state.user.lastBackupAt ? Math.floor((Date.now()-state.user.lastBackupAt)/86400000) : null;
@@ -2426,6 +2493,10 @@ function saveIncomeSchedule(){
   state.user.incomeDays=days;
   state.user.primaryIncomeDay=days[0];
   state.user.monthlyIncomeTarget=target;
+  // Al cambiar el día de pago, el periodo actual se recalcula de una vez para que quede
+  // anclado a las fechas nuevas, no a un límite que ya no corresponde a ningún pago real.
+  state.currentPeriod = currentPeriodStr();
+  ensureMonthInstances(state.currentPeriod);
   saveState(); closeSheet(); render(); showToast('Actualizado');
 }
 
@@ -2543,7 +2614,7 @@ function restoreBackup(ev){
         localStorage.setItem('anka_state', JSON.stringify(state));
         sessionUnlocked = true;
         showToast('Respaldo restaurado');
-        nav('home');
+        navReset('home');
       }catch(e){
         console.error('Backup restore error', e);
         showToast('El archivo es un JSON válido pero no se pudo aplicar: '+(e.message||'error desconocido'));

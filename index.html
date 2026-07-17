@@ -367,6 +367,16 @@ function periodForDate(dateISO, incomeDays){ return prevPayAnchorOnOrBefore(date
 function periodEndDate(period, incomeDays){ return isoAddDays(nextPayAnchorAfter(period, incomeDays||[1]), -1); }
 function currentIncomeDays(){ return (typeof state!=='undefined' && state && state.user && state.user.incomeDays && state.user.incomeDays.length) ? state.user.incomeDays : [1]; }
 function currentPeriodStr(){ return periodForDate(todayISO(), currentIncomeDays()); }
+// Migración: versiones anteriores de ANKA usaban "AAAA-MM" (mes calendario) como clave de
+// periodo; ahora la clave es la fecha en que arranca el ciclo de pago (ej. "2026-06-21").
+// Un periodo viejo tipo "2026-07" se detecta por tener exactamente ese formato de 7
+// caracteres, y se reancla al periodo nuevo que contiene el día 1 de ese mes — no es una
+// traducción perfecta (el modelo viejo no sabía nada de días de pago), pero conserva el
+// dato en vez de dejarlo huérfano y evita el "Undefined" en el selector de periodo.
+const OLD_PERIOD_RE = /^\d{4}-\d{2}$/;
+function migrateOldPeriodKey(p, incomeDays){
+  return OLD_PERIOD_RE.test(p) ? periodForDate(p+'-01', incomeDays) : p;
+}
 // Progreso del ciclo de pago actual: cuánto ha avanzado y cuántos días faltan para el
 // próximo pago. Se calcula sobre el periodo en el que está hoy realmente (no el que esté
 // seleccionado en el selector de arriba, que el usuario puede haber movido para ver meses
@@ -443,6 +453,20 @@ function normalizeState(){
     if(typeof state.user.securityAnswerHash === 'undefined') state.user.securityAnswerHash='';
     if(typeof state.user.theme === 'undefined') state.user.theme='light';
     if(typeof state.user.lastBackupAt === 'undefined') state.user.lastBackupAt=null;
+  }
+  // Migrar cualquier periodo guardado en el formato viejo "AAAA-MM" al nuevo formato
+  // anclado al ciclo de pago. Debe correr DESPUÉS de garantizar incomeDays arriba, porque
+  // necesita esa info para saber a qué ciclo nuevo corresponde cada fecha vieja.
+  const days = state.user ? state.user.incomeDays : [1];
+  if(OLD_PERIOD_RE.test(state.currentPeriod)){
+    state.currentPeriod = migrateOldPeriodKey(state.currentPeriod, days);
+  }
+  (state.categoryBudgets||[]).forEach(b=>{ b.period = migrateOldPeriodKey(b.period, days); });
+  (state.obligationInstances||[]).forEach(i=>{ i.period = migrateOldPeriodKey(i.period, days); });
+  if(state.obligationsBudget && typeof state.obligationsBudget==='object'){
+    const migratedOB={};
+    Object.keys(state.obligationsBudget).forEach(p=>{ migratedOB[migrateOldPeriodKey(p, days)] = state.obligationsBudget[p]; });
+    state.obligationsBudget = migratedOB;
   }
   if(!Array.isArray(state.notificationReadIds)) state.notificationReadIds=[];
   if(!Array.isArray(state.notificationDismissedIds)) state.notificationDismissedIds=[];
@@ -1762,7 +1786,7 @@ function saveHistoricalPayment(){
   const ob=oblById(obId);
   if(!ob){ showToast('Elige a cuál obligación corresponde este pago'); return; }
   if(amount<=0){ showToast('Escribe un valor mayor a cero'); return; }
-  const period=date.slice(0,7);
+  const period=periodForDate(date, currentIncomeDays());
   let inst=state.obligationInstances.find(i=>i.obligationId===obId && i.period===period);
   if(!inst){
     inst={id:uid(),obligationId:obId,period,expectedAmount:Math.max(amount,ob.expectedAmount||amount),paidAmount:0,remainingAmount:Math.max(amount,ob.expectedAmount||amount),dueDate:date,status:'pending',historical:true};

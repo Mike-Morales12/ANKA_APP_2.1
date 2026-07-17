@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ANKA — Prototipo HTML v1.4.4 Beta cerrada</title>
+<title>ANKA — v1.5.0 Beta PWA</title>
 <meta name="description" content="ANKA — Nada se te pasa. Finanzas personales simples y claras.">
 <meta name="theme-color" content="#0D47A1">
 <link rel="manifest" href="manifest.json">
@@ -202,6 +202,8 @@ a{color:inherit;}
 
 /* toast */
 #toast{position:fixed;left:50%;bottom:104px;transform:translate(-50%,20px);background:var(--text-900);color:#fff;padding:12px 20px;border-radius:100px;font-size:14px;font-weight:600;opacity:0;transition:all .25s ease;z-index:70;max-width:380px;text-align:center;pointer-events:none;}
+#update-banner{position:fixed;left:12px;right:12px;bottom:12px;background:var(--blue-900);color:#fff;padding:14px 16px;border-radius:var(--r-card);box-shadow:var(--shadow);z-index:80;display:flex;align-items:center;gap:12px;font-size:13.5px;max-width:460px;margin:0 auto;}
+#update-banner button{background:#fff;color:var(--blue-900);border:none;border-radius:100px;padding:8px 14px;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0;}
 #toast.show{opacity:1;transform:translate(-50%,0);}
 
 /* icon library grid */
@@ -726,8 +728,31 @@ function closeSheet(){
 
 /* ======================= ROUTER ======================= */
 let currentScreen='login';
+let navHistory = [];
 function nav(screen, params){
+  if(currentScreen){ navHistory.push({screen: currentScreen, uiTemp: uiTemp}); }
   currentScreen=screen; uiTemp = params||{};
+  render();
+  document.getElementById('screen-root').scrollTop=0;
+  window.scrollTo(0,0);
+}
+// Para los puntos donde no debe quedar nada "atrás" (login/PIN exitoso, cerrar sesión,
+// reiniciar datos, cambiar de pestaña principal): limpia el historial antes de navegar,
+// para que el botón atrás no regrese a pantallas de una sesión o un flujo ya cerrado.
+function navReset(screen, params){
+  navHistory = [];
+  currentScreen=screen; uiTemp = params||{};
+  render();
+  document.getElementById('screen-root').scrollTop=0;
+  window.scrollTo(0,0);
+}
+// El botón "atrás" real: vuelve exactamente a la pantalla (y su estado) de donde viniste,
+// en vez de a un destino fijo. Si no hay historial (ej. se entró por un enlace directo),
+// cae de forma segura a Inicio.
+function navBack(){
+  const prev = navHistory.pop();
+  if(prev){ currentScreen=prev.screen; uiTemp=prev.uiTemp; }
+  else { currentScreen='home'; uiTemp={}; }
   render();
   document.getElementById('screen-root').scrollTop=0;
   window.scrollTo(0,0);
@@ -748,7 +773,7 @@ function renderBottomNav(){
   nv.innerHTML = NAV_ITEMS.map(it=>{
     if(it.id==='__fab') return `<button class="nav-fab" onclick="openMainSheet()">${icon('plus',26)}</button>`;
     const active = currentScreen===it.id;
-    return `<button class="nav-item ${active?'active':''}" onclick="nav('${it.id}')">${icon(it.icon,22)}<span>${it.label}</span></button>`;
+    return `<button class="nav-item ${active?'active':''}" onclick="navReset('${it.id}')">${icon(it.icon,22)}<span>${it.label}</span></button>`;
   }).join('');
 }
 
@@ -794,7 +819,10 @@ function afterRenderHooks(){
 
 /* ======================= HEADER HELPER ======================= */
 function subHeader(title, back){
-  return `<div class="top-header"><button class="back" onclick="${back}">${icon('back',20)}</button><h2>${title}</h2><div class="spacer"></div></div>`;
+  // 'back' se ignora a propósito: antes cada pantalla mandaba a un destino fijo
+  // (ej. siempre a Obligaciones), sin importar desde dónde habías entrado. Ahora
+  // todas usan navBack(), que vuelve a la pantalla real de la que veniste.
+  return `<div class="top-header"><button class="back" onclick="navBack()">${icon('back',20)}</button><h2>${title}</h2><div class="spacer"></div></div>`;
 }
 
 /* ======================= LOGIN / PIN ======================= */
@@ -813,9 +841,9 @@ function screenLogin(){
 function doLogin(){
   const nick=document.getElementById('li-nick').value.trim();
   const pass=document.getElementById('li-pass').value;
-  if(!state.onboardingDone){ showToast('Primero crea tu cuenta'); return; }
-  if(nick!==state.user.nickname || !passwordMatches(pass)){ showToast('Nick o contraseña incorrectos'); return; }
-  nav('pin',{mode:'unlock'});
+  if(!state.onboardingDone){ showToast('Primero necesitas crear tu cuenta'); return; }
+  if(nick!==state.user.nickname || !passwordMatches(pass)){ showToast('Ese nick o esa contraseña no coinciden'); return; }
+  navReset('pin',{mode:'unlock'});
 }
 let __passwordConfirmCallback = null;
 function requestPasswordConfirm(title, body, onConfirm){
@@ -828,7 +856,7 @@ function requestPasswordConfirm(title, body, onConfirm){
 }
 function runPasswordConfirm(){
   const pass=document.getElementById('pwc-input').value;
-  if(!passwordMatches(pass)){ showToast('La contraseña no coincide'); return; }
+  if(!passwordMatches(pass)){ showToast('Esa no es tu contraseña actual'); return; }
   const cb=__passwordConfirmCallback; __passwordConfirmCallback=null;
   closeSheet();
   if(cb) cb();
@@ -841,7 +869,7 @@ function resetPrototypeData(){
   state = defaultState();
   sessionUnlocked = false;
   showToast('Datos de prueba reiniciados');
-  nav('login');
+  navReset('login');
 }
 /* ======================= RECUPERACIÓN DE CONTRASEÑA / PIN ======================= */
 // ANKA no usa correo electrónico como credencial (decisión cerrada del MVP), así que la
@@ -876,19 +904,19 @@ function renderRecoverySheet(){
 }
 function verifyRecoveryAnswer(){
   const a=document.getElementById('rec-answer').value;
-  if(!securityAnswerMatches(a)){ showToast('La respuesta no coincide'); return; }
+  if(!securityAnswerMatches(a)){ showToast('Esa respuesta no coincide con la que registraste'); return; }
   uiTemp.recovery.answered=true;
   renderRecoverySheet();
 }
 function saveRecovery(){
   const pass=document.getElementById('rec-pass').value;
   const pin=document.getElementById('rec-pin').value;
-  if(!pass||pass.length<4){ showToast('La contraseña debe tener al menos 4 caracteres'); return; }
-  if(!/^\d{4}$/.test(pin)){ showToast('El PIN debe ser de 4 dígitos'); return; }
+  if(!pass||pass.length<4){ showToast('Tu contraseña necesita al menos 4 caracteres'); return; }
+  if(!/^\d{4}$/.test(pin)){ showToast('Tu PIN debe tener exactamente 4 dígitos'); return; }
   state.user.passwordHash=simpleHash(pass);
   state.user.pinHash=simpleHash(pin);
   saveState(); closeSheet(); showToast('Contraseña y PIN actualizados');
-  sessionUnlocked=true; ensureMonthInstances(state.currentPeriod); nav('home');
+  sessionUnlocked=true; ensureMonthInstances(state.currentPeriod); navReset('home');
 }
 function screenPin(){
   const len=(uiTemp.pinBuffer||'').length;
@@ -915,8 +943,8 @@ function pinKey(k){
   render();
   if(uiTemp.pinBuffer.length===4){
     setTimeout(()=>{
-      if(pinMatches(uiTemp.pinBuffer)){ sessionUnlocked=true; ensureMonthInstances(state.currentPeriod); nav('home'); }
-      else { showToast('PIN incorrecto'); uiTemp.pinBuffer=''; render(); }
+      if(pinMatches(uiTemp.pinBuffer)){ sessionUnlocked=true; ensureMonthInstances(state.currentPeriod); navReset('home'); }
+      else { showToast('Ese PIN no es correcto, intenta de nuevo'); uiTemp.pinBuffer=''; render(); }
     },150);
   }
 }
@@ -938,7 +966,7 @@ function screenOnboarding(){
   let body='';
   if(step===0){
     body=`<div class="ob-mascot">👋</div><div class="ob-title">Bienvenido a ANKA</div><div class="ob-desc">Nada se te pasa. Te ayudamos a entender cuánto dinero puedes usar realmente, después de tus gastos, obligaciones y ahorro.</div>
-    <div class="field"><label>¿Cómo te llamas? (nick)</label><input id="ob-nick" value="${ob.nickname}" placeholder="Ej: Miguel"></div>
+    <div class="field"><label>¿Cómo quieres que te llamemos?</label><input id="ob-nick" value="${ob.nickname}" placeholder="Ej: Miguel, Migue, o lo que prefieras"><div class="help">Puede ser tu nombre, un apodo, con o sin números — lo que se te haga fácil de recordar. Lo vas a usar para entrar y para saludarte cada vez que abras ANKA.</div></div>
     <div class="field"><label>Crea una contraseña</label><input id="ob-pass" type="password" value="${ob.password}" placeholder="Mínimo 4 caracteres"></div>
     <div class="field"><label>Pregunta de seguridad</label><select id="ob-secq">
       ${SECURITY_QUESTIONS.map(q=>`<option value="${q}" ${ob.securityQuestion===q?'selected':''}>${q}</option>`).join('')}
@@ -964,20 +992,20 @@ function screenOnboarding(){
     `}`;
   } else if(step===3){
     const quinc = ob.incomeFrequency==='quincenal';
-    body=`<div class="ob-title">${quinc?'Registra tu pago quincenal más reciente':'Registra tu ingreso principal'}</div>
-    <div class="ob-desc">${quinc?'Este primer pago es obligatorio para comenzar. Si tu segundo pago del mes es de otro valor, podrás registrarlo tal cual cuando llegue; esto es solo para arrancar.':'Este primer ingreso es obligatorio para comenzar.'}</div>
+    body=`<div class="ob-title">${quinc?'¿Cuánto fue tu último pago quincenal?':'¿Cuánto fue tu último sueldo o ingreso?'}</div>
+    <div class="ob-desc">${quinc?'Escribe el valor de tu quincena más reciente (lo que te pagaron, no un estimado). Es obligatorio para poder arrancar. Si tu segundo pago del mes suele ser distinto, podrás registrarlo tal cual cuando llegue; esto es solo para empezar.':'Escribe cuánto recibiste la última vez — tu sueldo, un pago independiente, o lo que sea que hayas recibido como ingreso principal. Es obligatorio para poder arrancar.'}</div>
     <input data-money data-init="${ob.incomeAmount}" id="ob-income" class="money-display" inputmode="numeric">
     ${quinc?`<div class="help" style="text-align:center">Asumimos que tu otro pago quincenal es similar, para proyectar tu ingreso del mes en ${formatMoneyCurrency(ob.incomeAmount*2,ob.currency)}.</div>`:''}`;
   } else if(step===4){
     const projected = ob.incomeFrequency==='quincenal' ? ob.incomeAmount*2 : ob.incomeAmount;
-    body=`<div class="ob-title">Meta inicial de presupuesto</div><div class="ob-desc">Define una referencia general para este mes. Luego podrás distribuirla por categorías desde Presupuestos. No puede superar tu ingreso ${ob.incomeFrequency==='quincenal'?'mensual proyectado':'registrado'} (${formatMoneyCurrency(projected,ob.currency)}).</div>
+    body=`<div class="ob-title">¿Cuánto quieres poder gastar este mes?</div><div class="ob-desc">Danos un número general para empezar — no tienes que pensarlo mucho. Más adelante, en Presupuestos, vas a repartir ese número entre categorías (comida, transporte, etc.), y podrás cambiar todo esto cuando quieras. Por ahora solo es tu punto de partida. No puede superar tu ingreso ${ob.incomeFrequency==='quincenal'?'mensual proyectado':'registrado'} (${formatMoneyCurrency(projected,ob.currency)}).</div>
     <input data-money data-init="${ob.budgetGeneral}" id="ob-budget" class="money-display" inputmode="numeric">`;
   } else if(step===5){
     const templates=['Arriendo','Internet','Celular','Parqueadero','Servicios públicos','Netflix','Spotify','Personalizada'];
-    body=`<div class="ob-title">Obligaciones rápidas</div><div class="ob-desc">Selecciona las que apliquen. La primera es obligatoria para continuar.</div>
+    body=`<div class="ob-title">¿Cuáles de estas ya pagas cada mes?</div><div class="ob-desc">Marca las que apliquen — así no se te van a pasar. La primera es obligatoria para poder continuar.</div>
     <div class="chip-row" style="flex-wrap:wrap;overflow:visible">${templates.map(t=>`<button class="chip ${ob.quickObligations.find(q=>q.templateName===t || q.name===t)?'active':''}" style="margin-bottom:8px" onclick="toggleQuickOb('${t}')">${t}</button>`).join('')}</div>`;
   } else if(step===6){
-    body=`<div class="ob-title">Completa tus obligaciones</div><div class="ob-desc">Define nombre, valor, categoría y vencimiento para cada una.</div>
+    body=`<div class="ob-title">Cuéntanos un poco más de cada una</div><div class="ob-desc">Nombre, valor, categoría y cuándo vence — con esto ya podemos empezar a avisarte a tiempo.</div>
     ${ob.quickObligations.map((q,idx)=>`
       <div class="card">
         <div class="field"><label>Nombre de la obligación</label><input id="obq-name-${idx}" value="${q.name||''}" placeholder="Ej: Crédito moto, cuota familiar"></div>
@@ -988,7 +1016,7 @@ function screenOnboarding(){
       </div>`).join('') || `<div class="empty-state"><p>No seleccionaste obligaciones rápidas. Puedes crear obligaciones más adelante desde el módulo Obligaciones.</p></div>`}`;
   } else if(step===7){
     const len=(ob.pin||'').length;
-    body=`<div class="ob-title">Configura tu PIN</div><div class="ob-desc">Lo usarás para entrar cada día a ANKA.</div>
+    body=`<div class="ob-title">Crea tu PIN de acceso diario</div><div class="ob-desc">4 dígitos, para entrar rápido cada vez que abras ANKA — no hace falta escribir tu contraseña otra vez.</div>
     <div class="pin-dots">${[0,1,2,3].map(i=>`<div class="d ${i<len?'filled':''}"></div>`).join('')}</div>
     <div class="pin-pad">
       ${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="pin-key" onclick="obPinKey('${n}')">${n}</button>`).join('')}
@@ -997,7 +1025,7 @@ function screenOnboarding(){
       <button class="pin-key" onclick="obPinKey('back')">⌫</button>
     </div>`;
   } else if(step===8){
-    body=`<div class="ob-title">Resumen</div><div class="ob-desc">Revisa antes de confirmar. Puedes volver atrás para editar.</div>
+    body=`<div class="ob-title">Antes de terminar, revisemos todo</div><div class="ob-desc">Si algo no cuadra, puedes volver atrás y cambiarlo — nada de esto es definitivo.</div>
     <div class="card">
       <div class="breakdown-row" style="display:flex;justify-content:space-between;padding:6px 0"><span>Nick</span><b>${ob.nickname}</b></div>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Moneda</span><b>${ob.currency}</b></div>
@@ -1060,9 +1088,9 @@ function obNext(){
     const pass=document.getElementById('ob-pass').value;
     const secq=document.getElementById('ob-secq').value;
     const seca=document.getElementById('ob-seca').value.trim();
-    if(!nick){ showToast('Ingresa tu nick'); return; }
-    if(!pass||pass.length<4){ showToast('La contraseña debe tener al menos 4 caracteres'); return; }
-    if(!seca){ showToast('Responde la pregunta de seguridad para poder recuperar tu cuenta después'); return; }
+    if(!nick){ showToast('Nos falta saber cómo llamarte'); return; }
+    if(!pass||pass.length<4){ showToast('Tu contraseña necesita al menos 4 caracteres'); return; }
+    if(!seca){ showToast('Falta tu respuesta — la necesitamos para poder ayudarte a recuperar tu cuenta más adelante'); return; }
     ob.nickname=nick; ob.password=pass; ob.securityQuestion=secq; ob.securityAnswer=seca;
   } else if(step===2){
     const day=parseInt(document.getElementById('ob-day').value||'1',10);
@@ -1071,11 +1099,11 @@ function obNext(){
       const day2El=document.getElementById('ob-day2');
       const day2=parseInt((day2El?day2El.value:'')||'15',10);
       ob.incomeDay2 = Math.min(31,Math.max(1,day2||15));
-      if(ob.incomeDay2===ob.incomeDay){ showToast('Los dos días de pago deben ser distintos'); return; }
+      if(ob.incomeDay2===ob.incomeDay){ showToast('Elige dos días diferentes para tus pagos'); return; }
     }
   } else if(step===3){
     const val=parseInt(document.getElementById('ob-income').dataset.raw||'0',10);
-    if(val<=0){ showToast('Registra un monto válido para continuar'); return; }
+    if(val<=0){ showToast('Escribe un monto para poder continuar'); return; }
     ob.incomeAmount=val;
   } else if(step===4){
     const val=parseInt(document.getElementById('ob-budget').dataset.raw||'0',10);
@@ -1083,22 +1111,22 @@ function obNext(){
     if(val>projected){ showToast(ob.incomeFrequency==='quincenal' ? 'El presupuesto no puede superar tu ingreso mensual proyectado (los dos pagos quincenales)' : 'El presupuesto no puede superar el ingreso registrado'); return; }
     ob.budgetGeneral=val;
   } else if(step===5){
-    if(ob.quickObligations.length===0){ showToast('Selecciona al menos una obligación para continuar'); return; }
+    if(ob.quickObligations.length===0){ showToast('Elige al menos una para continuar'); return; }
   } else if(step===6){
     syncQuickObFromDOM();
     for(const q of ob.quickObligations){
       q.name=(q.name||'').trim();
-      if(!q.name){ showToast('Todas las obligaciones necesitan nombre'); return; }
-      if(q.amount<=0){ showToast('Todas las obligaciones necesitan un valor mayor a cero'); return; }
+      if(!q.name){ showToast('Ponle nombre a cada obligación antes de continuar'); return; }
+      if(q.amount<=0){ showToast('Cada obligación necesita un valor mayor a cero'); return; }
       if(q.categoryId==='__new'){
         const newName=(q.newCategoryName||'').trim();
-        if(!newName){ showToast('Escribe el nombre de la nueva categoría'); return; }
+        if(!newName){ showToast('Escribe cómo se va a llamar esta categoría nueva'); return; }
         const nc={id:uid(),name:newName,type:'expense',icon:q.newCategoryIcon||'🧾',isDefault:false,isActive:true};
         state.categories.push(nc); q.categoryId=nc.id;
       }
     }
   } else if(step===7){
-    if(!ob.pin || ob.pin.length!==4){ showToast('El PIN debe tener 4 dígitos'); return; }
+    if(!ob.pin || ob.pin.length!==4){ showToast('Tu PIN debe tener exactamente 4 dígitos'); return; }
   }
   uiTemp.step=step+1; render();
 }
@@ -1389,8 +1417,8 @@ function saveMovement(){
   const description=document.getElementById('mv-desc').value.trim();
   const date=document.getElementById('mv-date').value||todayISO();
   const note=document.getElementById('mv-note').value;
-  if(amount<=0){ showToast('El monto debe ser mayor a cero'); return; }
-  if(!description){ showToast('La descripción es obligatoria'); return; }
+  if(amount<=0){ showToast('Escribe un monto mayor a cero'); return; }
+  if(!description){ showToast('Agrega una breve descripción para identificarlo después'); return; }
   if(f.id){
     const m=state.movements.find(x=>x.id===f.id);
     Object.assign(m,{amount,categoryId,description,date,note});
@@ -1430,7 +1458,7 @@ function getMv(id){ return state.movements.find(m=>m.id===id); }
 function sourceLabel(s){ return {obligation_payment:'Pago de obligación',debt_payment:'Pago de deuda',saving_contribution:'Aporte a meta',saving_withdrawal:'Retiro de meta'}[s]||s; }
 function deleteMovement(id){
   state.movements = state.movements.filter(m=>m.id!==id);
-  saveState(); showToast('Movimiento eliminado'); nav('movements');
+  saveState(); showToast('Movimiento eliminado'); navBack();
 }
 
 /* ======================= OBLIGATIONS ======================= */
@@ -1616,8 +1644,8 @@ function confirmPayment(instId){
   const date=document.getElementById('pay-date').value||todayISO();
   const inst = state.obligationInstances.find(i=>i.id===instId);
   const ob = oblById(inst.obligationId);
-  if(amount<=0){ showToast('El monto debe ser mayor a cero'); return; }
-  if(amount>inst.remainingAmount){ showToast('El pago no puede superar el saldo pendiente'); return; }
+  if(amount<=0){ showToast('Escribe un monto mayor a cero'); return; }
+  if(amount>inst.remainingAmount){ showToast('Ese pago es mayor al saldo que queda pendiente'); return; }
   inst.paidAmount += amount;
   inst.remainingAmount = Math.max(0, inst.remainingAmount-amount);
   inst.status = inst.remainingAmount<=0 ? 'paid' : 'partially_paid';
@@ -1641,7 +1669,7 @@ function confirmPayment(instId){
 function openHistoricalPaymentPresetSheet(obId){ openHistoricalPaymentSheet(obId); }
 function openHistoricalPaymentSheet(presetObId){
   const obs=state.obligations.filter(o=>o.isActive);
-  if(obs.length===0){ showToast('Primero crea una obligación'); nav('obligationForm'); return; }
+  if(obs.length===0){ showToast('Todavía no tienes obligaciones — crea una primero'); nav('obligationForm'); return; }
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Registrar pago histórico</div><div class="sheet-sub">Úsalo para pagos antiguos o cuotas que ya venías pagando antes de registrar la obligación en ANKA.</div>
     <div class="field"><label>Obligación</label><select id="hist-ob">${obs.map(o=>{const c=catById(o.categoryId);return `<option value="${o.id}" ${presetObId===o.id?'selected':''}>${c?c.icon:''} ${o.name}</option>`;}).join('')}</select></div>
     <div class="field"><label>Fecha en que se pagó</label><input type="date" id="hist-date" value="${todayISO()}"><div class="help">Puedes elegir una fecha anterior para reconstruir historial de pagos.</div></div>
@@ -1659,8 +1687,8 @@ function saveHistoricalPayment(){
   const amount=parseInt(document.getElementById('hist-amount').dataset.raw||'0',10);
   const source=document.getElementById('hist-source').value;
   const ob=oblById(obId);
-  if(!ob){ showToast('Selecciona una obligación'); return; }
-  if(amount<=0){ showToast('El valor debe ser mayor a cero'); return; }
+  if(!ob){ showToast('Elige a cuál obligación corresponde este pago'); return; }
+  if(amount<=0){ showToast('Escribe un valor mayor a cero'); return; }
   const period=date.slice(0,7);
   let inst=state.obligationInstances.find(i=>i.obligationId===obId && i.period===period);
   if(!inst){
@@ -1773,7 +1801,7 @@ function resolveObCategory(){
   const f=uiTemp.obForm; let categoryId=f.categoryId;
   if(categoryId==='__new'){
     const newName=(f.newCategoryName||'').trim();
-    if(!newName){ showToast('Escribe el nombre de la nueva categoría'); return null; }
+    if(!newName){ showToast('Escribe cómo se va a llamar esta categoría nueva'); return null; }
     const nc={id:uid(),name:newName,type:'expense',icon:f.newCategoryIcon||'🧾',isDefault:false,isActive:true};
     state.categories.push(nc); categoryId=nc.id;
   }
@@ -1783,11 +1811,11 @@ function saveObligation(){
   syncObFormFromDOM();
   const f=uiTemp.obForm;
   const name=(f.name||'').trim();
-  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!name){ showToast('Este campo necesita un nombre'); return; }
   const categoryId=resolveObCategory(); if(!categoryId) return;
   if(f.type==='recurring' || f.type==='one_time'){
     const amount=parseInt(f.amount||0,10);
-    if(amount<=0){ showToast('El valor debe ser mayor a cero'); return; }
+    if(amount<=0){ showToast('Escribe un valor mayor a cero'); return; }
     const newOb={id:uid(),name,categoryId,type:f.type,expectedAmount:amount,frequency:f.type==='recurring'?'mensual':null,
       dueDay: f.type==='recurring'? Math.min(31,Math.max(1,parseInt(f.dueDay||'1',10))) : null,
       dueDate: f.type==='one_time'? f.dueDate : null,
@@ -1796,14 +1824,14 @@ function saveObligation(){
   } else {
     const principal=parseInt(f.principal||0,10);
     const term=parseInt(f.term||0,10);
-    if(principal<=0||term<=0){ showToast('Completa capital y plazo'); return; }
+    if(principal<=0||term<=0){ showToast('Necesitamos el capital y el plazo para calcular la cuota'); return; }
     let monthlyRate, installment;
     if(f.rateMode==='rate'){
       const ea=parseFloat(f.ea||'0')/100;
       monthlyRate=eaToMonthly(ea); installment=Math.round(pmt(principal,monthlyRate,term));
     } else {
       installment=parseInt(f.installment||0,10);
-      if(installment<=0){ showToast('Ingresa la cuota mensual'); return; }
+      if(installment<=0){ showToast('Escribe cuánto es la cuota mensual'); return; }
       monthlyRate=impliedMonthlyRate(principal,installment,term);
     }
     const firstPaymentDate=f.firstPaymentDate||todayISO();
@@ -1814,7 +1842,7 @@ function saveObligation(){
     state.obligations.push(newOb);
   }
   ensureMonthInstances(state.currentPeriod);
-  saveState(); uiTemp.obForm=null; showToast('Obligación guardada'); nav('obligations');
+  saveState(); uiTemp.obForm=null; showToast('Obligación guardada'); navBack();
 }
 function screenObligationDetail(){
   const ob=oblById(uiTemp.id); if(!ob){ nav('obligations'); return ''; }
@@ -1906,7 +1934,7 @@ function saveLoanInsurance(obId){
   saveState(); closeSheet(); showToast('Seguro actualizado'); render();
 }
 function toggleObligation(id){ const ob=oblById(id); ob.isActive=!ob.isActive; saveState(); showToast('Actualizado'); render(); }
-function finishObligation(id){ const ob=oblById(id); ob.isActive=false; ob.endDate=todayISO(); saveState(); showToast('Obligación finalizada'); nav('obligations'); }
+function finishObligation(id){ const ob=oblById(id); ob.isActive=false; ob.endDate=todayISO(); saveState(); showToast('Obligación finalizada'); navBack(); }
 function deleteObligation(id){
   // Se elimina la obligación y sus cuotas/instancias (pasadas y futuras) para que no
   // aparezca en listados ni en Comprometido. Los movimientos de pagos ya registrados NO se
@@ -1921,7 +1949,7 @@ function deleteObligation(id){
   });
   state.obligationInstances = state.obligationInstances.filter(i=>i.obligationId!==id);
   state.obligations = state.obligations.filter(o=>o.id!==id);
-  saveState(); showToast('Obligación eliminada'); nav('obligations');
+  saveState(); showToast('Obligación eliminada'); navBack();
 }
 function openExtraPaymentSheet(obId){
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Abono extraordinario</div><div class="sheet-sub">Elige qué prefieres optimizar</div>
@@ -1934,7 +1962,7 @@ function setExtraMode(m){ uiTemp.extraMode=m; document.getElementById('extra-mod
 function applyExtraPayment(obId){
   const ob=oblById(obId);
   const amount=parseInt(document.getElementById('extra-amount').dataset.raw||'0',10);
-  if(amount<=0||amount>ob.loan.currentBalance){ showToast('Ingresa un monto válido, no mayor al saldo'); return; }
+  if(amount<=0||amount>ob.loan.currentBalance){ showToast('Ese monto es mayor al saldo pendiente del préstamo'); return; }
   ob.loan.currentBalance -= amount;
   const remaining = ob.loan.term - (ob.loan.paidInstallments||0);
   if(uiTemp.extraMode==='term'){
@@ -1944,7 +1972,7 @@ function applyExtraPayment(obId){
     ob.loan.installment = Math.round(pmt(ob.loan.currentBalance, ob.loan.monthlyRate, remaining));
   }
   state.movements.push({id:uid(),type:'expense',amount,categoryId:ob.categoryId,description:ob.name+' (abono extra)',date:todayISO(),note:'Abono a capital',sourceType:'debt_payment',sourceId:ob.id,createdAt:Date.now()});
-  saveState(); closeSheet(); showToast('Abono aplicado'); nav('obligationDetail',{id:obId});
+  saveState(); closeSheet(); showToast('Abono aplicado'); uiTemp={id:obId}; render();
 }
 
 function openLoanAdjustSheet(obId){
@@ -1963,7 +1991,7 @@ function saveLoanAdjustment(obId){
   const nextPayment=parseInt(document.getElementById('loan-next-payment').dataset.raw||'0',10);
   const extraCharge=parseInt(document.getElementById('loan-extra-charge').dataset.raw||'0',10);
   const reason=document.getElementById('loan-adjust-reason').value.trim()||'Ajuste de préstamo';
-  if(newTerm<=0){ showToast('El plazo debe ser válido'); return; }
+  if(newTerm<=0){ showToast('Escribe un plazo válido, mayor a cero'); return; }
   if(newTerm!==ob.loan.term) ob.loan.term=newTerm;
   if(extraCharge>0) ob.loan.currentBalance += extraCharge;
   if(nextPayment>0) ob.loan.nextInstallmentAmount=nextPayment;
@@ -1975,7 +2003,7 @@ function saveLoanAdjustment(obId){
   }
   ob.loan.adjustments = ob.loan.adjustments || [];
   ob.loan.adjustments.push({date:todayISO(),newTerm,nextPayment,extraCharge,reason});
-  saveState(); closeSheet(); showToast('Ajuste guardado'); nav('obligationDetail',{id:obId});
+  saveState(); closeSheet(); showToast('Ajuste guardado'); uiTemp={id:obId}; render();
 }
 
 /* ======================= SAVINGS ======================= */
@@ -2007,13 +2035,13 @@ function saveGoal(){
   const name=document.getElementById('goal-name').value.trim();
   const target=parseInt(document.getElementById('goal-target').dataset.raw||'0',10);
   const date=document.getElementById('goal-date').value||null;
-  if(!name){ showToast('El nombre es obligatorio'); return; }
-  if(target<=0){ showToast('El monto objetivo debe ser mayor a cero'); return; }
+  if(!name){ showToast('Este campo necesita un nombre'); return; }
+  if(target<=0){ showToast('La meta necesita un monto objetivo mayor a cero'); return; }
   state.savingsGoals.push({id:uid(),name,targetAmount:target,savedAmount:0,targetDate:date,priority:'media',status:'active'});
   saveState(); closeSheet(); showToast('Meta creada'); render();
 }
 function openContributionPicker(){
-  if(state.savingsGoals.length===0){ showToast('Primero crea una meta de ahorro'); openGoalForm(); return; }
+  if(state.savingsGoals.length===0){ showToast('Todavía no tienes metas de ahorro — crea una primero'); openGoalForm(); return; }
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Aportar a una meta</div>
   ${state.savingsGoals.map(g=>`<div class="sheet-action" onclick="openContribution('${g.id}')"><div class="ic">🐷</div><div class="txt"><div class="t">${g.name}</div><div class="s">${formatMoney(g.savedAmount)} de ${formatMoney(g.targetAmount)}</div></div></div>`).join('')}`);
 }
@@ -2026,11 +2054,11 @@ function openContribution(goalId){
 function saveContribution(goalId){
   const g=state.savingsGoals.find(x=>x.id===goalId);
   const amount=parseInt(document.getElementById('contrib-amount').dataset.raw||'0',10);
-  if(amount<=0){ showToast('El monto debe ser mayor a cero'); return; }
+  if(amount<=0){ showToast('Escribe un monto mayor a cero'); return; }
   g.savedAmount+=amount;
   if(g.savedAmount>=g.targetAmount) g.status='completed';
   state.movements.push({id:uid(),type:'expense',amount,categoryId:'c_otros',description:'Aporte: '+g.name,date:todayISO(),note:'',sourceType:'saving_contribution',sourceId:g.id,createdAt:Date.now()});
-  saveState(); closeSheet(); showToast('Aporte registrado'); if(currentScreen==='savingDetail') nav('savingDetail',{id:g.id}); else nav('savings');
+  saveState(); closeSheet(); showToast('Aporte registrado'); if(currentScreen==='savingDetail'){ uiTemp={id:g.id}; render(); } else { navBack(); }
 }
 function openWithdrawal(goalId){
   const g=state.savingsGoals.find(x=>x.id===goalId);
@@ -2043,8 +2071,8 @@ function saveWithdrawal(goalId){
   const g=state.savingsGoals.find(x=>x.id===goalId);
   const amount=parseInt(document.getElementById('wd-amount').dataset.raw||'0',10);
   const reason=document.getElementById('wd-reason').value.trim();
-  if(amount<=0||amount>g.savedAmount){ showToast('Ingresa un monto válido, no mayor al ahorrado'); return; }
-  if(!reason){ showToast('El motivo es obligatorio'); return; }
+  if(amount<=0||amount>g.savedAmount){ showToast('Ese monto es mayor a lo que tienes ahorrado en esta meta'); return; }
+  if(!reason){ showToast('Cuéntanos brevemente el motivo del retiro'); return; }
   g.savedAmount-=amount;
   state.movements.push({id:uid(),type:'income',amount,categoryId:'c_otro_ing',description:'Retiro: '+g.name+' — '+reason,date:todayISO(),note:reason,sourceType:'saving_withdrawal',sourceId:g.id,createdAt:Date.now()});
   saveState(); closeSheet(); showToast('Retiro registrado'); render();
@@ -2068,7 +2096,7 @@ function screenSavingDetail(){
 }
 function deleteGoal(id){
   state.savingsGoals = state.savingsGoals.filter(g=>g.id!==id);
-  saveState(); showToast('Meta eliminada, el dinero apartado vuelve a tu disponible'); nav('savings');
+  saveState(); showToast('Meta eliminada, el dinero apartado vuelve a tu disponible'); navBack();
 }
 
 /* ======================= BUDGETS ======================= */
@@ -2137,7 +2165,7 @@ function saveBudgetEditor(){
   const oblVal = parseInt(document.getElementById('be-obl').dataset.raw||'0',10);
   const vals = uiTemp.budgetEditor.map((r,idx)=>({categoryId:r.categoryId, limit: parseInt(document.getElementById('be-'+idx).dataset.raw||'0',10)}));
   const total = vals.reduce((s,v)=>s+v.limit,0);
-  if(income>0 && total>income){ showToast('La suma presupuestada no puede superar el ingreso mensual'); return; }
+  if(income>0 && total>income){ showToast('Lo que repartiste entre categorías supera tu ingreso mensual'); return; }
   state.obligationsBudget[period]=oblVal;
   vals.forEach(v=>{
     let b=state.categoryBudgets.find(x=>x.period===period&&x.categoryId===v.categoryId);
@@ -2293,8 +2321,8 @@ function screenSettings(){
     <div class="settings-row" onclick="nav('backup')"><div class="ic">☁️</div><div class="lbl">Respaldo y exportación</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="confirmResetPrototype()"><div class="ic">🧹</div><div class="lbl">Reiniciar datos de prueba</div><div class="val">Empezar desde cero</div>${icon('chevronR',16)}</div>
   </div>
-  <button class="btn btn-secondary" onclick="confirmAction('Cerrar sesión','Deberás ingresar tu PIN para volver a entrar.', ()=>{sessionUnlocked=false; nav('pin',{mode:'unlock'});})">Cerrar sesión</button>
-  <div class="footer-brand">ANKA<br>Producto: MVP 1.0 · Prototipo HTML: v1.4.4 Beta cerrada<br>UX/UI: v1.4.0 · By: Miguel Morales<br>Nada se te pasa.</div>
+  <button class="btn btn-secondary" onclick="confirmAction('Cerrar sesión','Deberás ingresar tu PIN para volver a entrar.', ()=>{sessionUnlocked=false; navReset('pin',{mode:'unlock'});})">Cerrar sesión</button>
+  <div class="footer-brand">ANKA<br>Producto: MVP 1.0 · v1.5.0 Beta PWA<br>By: Miguel Morales<br>Nada se te pasa.</div>
   </div>`;
 }
 function toggleSetting(key){ state.user[key]=!state.user[key]; saveState(); render(); }
@@ -2306,7 +2334,7 @@ function editNick(){
 }
 function saveNick(){
   const v=document.getElementById('nick-input').value.trim();
-  if(!v){ showToast('El nick no puede estar vacío'); return; }
+  if(!v){ showToast('Nos falta saber cómo llamarte'); return; }
   state.user.nickname=v; saveState(); closeSheet(); render(); showToast('Nick actualizado');
 }
 function editPassword(){
@@ -2319,8 +2347,8 @@ function editPassword(){
 function savePassword(){
   const current=document.getElementById('pw-current').value;
   const next=document.getElementById('pw-new').value;
-  if(!passwordMatches(current)){ showToast('La contraseña actual no coincide'); return; }
-  if(!next||next.length<4){ showToast('La nueva contraseña debe tener al menos 4 caracteres'); return; }
+  if(!passwordMatches(current)){ showToast('Esa no es tu contraseña actual'); return; }
+  if(!next||next.length<4){ showToast('Tu nueva contraseña necesita al menos 4 caracteres'); return; }
   state.user.passwordHash=simpleHash(next); saveState(); closeSheet(); showToast('Contraseña actualizada');
 }
 function editPin(){
@@ -2331,7 +2359,7 @@ function editPin(){
 }
 function savePin(){
   const v=document.getElementById('pin-new').value;
-  if(!/^\d{4}$/.test(v)){ showToast('El PIN debe ser de 4 dígitos'); return; }
+  if(!/^\d{4}$/.test(v)){ showToast('Tu PIN debe tener exactamente 4 dígitos'); return; }
   state.user.pinHash=simpleHash(v); saveState(); closeSheet(); showToast('PIN actualizado');
 }
 function editCurrency(){
@@ -2356,8 +2384,8 @@ function saveSecurityQuestion(){
   const q=document.getElementById('secq-select').value;
   const a=document.getElementById('secq-answer').value.trim();
   const pass=document.getElementById('secq-pass').value;
-  if(!passwordMatches(pass)){ showToast('La contraseña actual no coincide'); return; }
-  if(!a){ showToast('Escribe una respuesta'); return; }
+  if(!passwordMatches(pass)){ showToast('Esa no es tu contraseña actual'); return; }
+  if(!a){ showToast('Nos falta tu respuesta'); return; }
   state.user.securityQuestion=q; state.user.securityAnswerHash=simpleHash(normalizeAnswer(a));
   saveState(); closeSheet(); showToast('Pregunta de seguridad actualizada');
 }
@@ -2390,7 +2418,7 @@ function saveIncomeSchedule(){
   let days=[day1];
   if(e.frequency==='quincenal'){
     const day2=Math.min(31,Math.max(1,parseInt(document.getElementById('inc-day2').value||'15',10)));
-    if(day2===day1){ showToast('Los dos días de pago deben ser distintos'); return; }
+    if(day2===day1){ showToast('Elige dos días diferentes para tus pagos'); return; }
     days=[day1,day2].sort((a,b)=>a-b);
   }
   const target=parseInt(document.getElementById('inc-target').dataset.raw||'0',10);
@@ -2458,10 +2486,10 @@ function renderCategoryEditorSheet(){
 }
 function saveCategoryEdit(){
   const name=document.getElementById('cat-name').value.trim();
-  if(!name){ showToast('El nombre es obligatorio'); return; }
+  if(!name){ showToast('Este campo necesita un nombre'); return; }
   if(uiTemp.catEdit.id){ const c=catById(uiTemp.catEdit.id); c.name=name; c.icon=uiTemp.catEdit.icon; }
   else state.categories.push({id:uid(),name,type:'expense',icon:uiTemp.catEdit.icon||'🧾',isDefault:false,isActive:true});
-  saveState(); closeSheet(); showToast('Categoría guardada'); if(currentScreen==='obligationCategory'){ render(); } else { nav('categories'); }
+  saveState(); closeSheet(); showToast('Categoría guardada'); if(currentScreen==='obligationCategory'){ render(); } else { navBack(); }
 }
 
 /* ======================= BACKUP / EXPORT ======================= */
@@ -2500,7 +2528,7 @@ function restoreBackup(ev){
       return;
     }
     if(!parsed || typeof parsed!=='object' || !parsed.user || !Array.isArray(parsed.movements)){
-      showToast('Este archivo no tiene el formato de un respaldo de ANKA.');
+      showToast('Este archivo no tiene el formato de un respaldo de ANKA — revisa que sea el correcto.');
       ev.target.value='';
       return;
     }
@@ -2565,8 +2593,46 @@ if(window.visualViewport){
 // instalación/offline, que es una mejora, no un requisito para que ANKA funcione.
 if('serviceWorker' in navigator && location.protocol !== 'file:'){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('SW no registrado:', err));
+    navigator.serviceWorker.register('./sw.js').then((reg)=>{
+      // Si ya había una versión nueva esperando de una visita anterior (el usuario cerró
+      // la app sin actualizar), avisamos de una vez.
+      if(reg.waiting) showUpdateBanner(reg);
+      reg.addEventListener('updatefound', ()=>{
+        const installing = reg.installing;
+        if(!installing) return;
+        installing.addEventListener('statechange', ()=>{
+          // 'installed' + ya había un controller activo = esto es una actualización real,
+          // no la primera instalación (ahí no hay nada que "actualizar" todavía).
+          if(installing.state==='installed' && navigator.serviceWorker.controller){
+            showUpdateBanner(reg);
+          }
+        });
+      });
+    }).catch(err=>console.warn('SW no registrado:', err));
+
+    // Cuando el nuevo service worker toma control (tras aceptar la actualización),
+    // recargamos una sola vez para que la página use la versión nueva de verdad.
+    let reloadedForUpdate=false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(reloadedForUpdate) return;
+      reloadedForUpdate=true;
+      window.location.reload();
+    });
   });
+}
+function showUpdateBanner(reg){
+  if(document.getElementById('update-banner')) return; // ya se está mostrando
+  const el=document.createElement('div');
+  el.id='update-banner';
+  el.innerHTML=`<span>Hay una nueva versión de ANKA disponible.</span><button onclick="applyUpdate()">Actualizar ahora</button>`;
+  document.body.appendChild(el);
+  window.__pendingSWReg = reg;
+}
+function applyUpdate(){
+  const reg=window.__pendingSWReg;
+  if(reg && reg.waiting){ reg.waiting.postMessage('SKIP_WAITING'); }
+  const el=document.getElementById('update-banner');
+  if(el) el.remove();
 }
 
 /* ======================= BOOT ======================= */
@@ -2583,8 +2649,8 @@ async function boot(){
   // "Nick + contraseña en configuración inicial y PIN de 4 dígitos para acceso diario"
   // (decisión cerrada, doc 00). La contraseña solo se vuelve a pedir para recuperar
   // acceso o para acciones sensibles (ver requestPasswordConfirm), no en cada apertura.
-  if(!state.onboardingDone){ nav('login'); }
-  else { nav('pin',{mode:'unlock'}); }
+  if(!state.onboardingDone){ navReset('login'); }
+  else { navReset('pin',{mode:'unlock'}); }
 }
 boot();
 </script>

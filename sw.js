@@ -9,7 +9,7 @@
 // la actualice (ver el mensaje "Hay una nueva versión de ANKA disponible" en index.html).
 // Si NO subes este archivo con la versión cambiada, los navegadores van a seguir
 // sirviendo el HTML viejo desde caché aunque el index.html en GitHub ya esté actualizado.
-const CACHE_VERSION = 'anka-v1-5-0';
+const CACHE_VERSION = 'anka-v1-5-0b';
 const APP_SHELL = [
   './',
   './index.html',

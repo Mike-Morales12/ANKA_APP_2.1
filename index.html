@@ -2014,11 +2014,130 @@ function screenObligationDetail(){
     <button class="btn btn-text btn-sm" style="margin-top:4px;padding:8px 0" onclick="openHistoricalPaymentPresetSheet('${ob.id}')">Registrar pago histórico</button>
   </div>
   <div style="display:flex;gap:10px">
+    <button class="btn btn-secondary" onclick="openEditObligationSheet('${ob.id}')">Editar</button>
     <button class="btn btn-secondary" onclick="confirmAction('${ob.isActive?'Pausar obligación':'Reactivar obligación'}','Puedes cambiar esto luego en cualquier momento.', ()=>toggleObligation('${ob.id}'))">${ob.isActive?'Pausar':'Reactivar'}</button>
-    <button class="btn btn-danger" onclick="confirmAction('Finalizar obligación','No se generarán más cuotas futuras. Esta acción no elimina el historial.', ()=>finishObligation('${ob.id}'), true)">Finalizar</button>
   </div>
+  <button class="btn btn-danger" style="margin-top:10px" onclick="confirmAction('Finalizar obligación','No se generarán más cuotas futuras. Esta acción no elimina el historial.', ()=>finishObligation('${ob.id}'), true)">Finalizar</button>
   <button class="btn btn-text" style="color:var(--critical);margin-top:6px" onclick="confirmAction('Eliminar obligación','Esto elimina «${ob.name}» y sus fechas pendientes por completo. Los pagos que ya registraste quedan en tu historial de movimientos, pero dejarán de estar asociados a esta obligación. Esta acción no se puede deshacer.', ()=>deleteObligation('${ob.id}'), true)">Eliminar obligación por completo</button>
   </div>`;
+}
+function openEditObligationSheet(obId){
+  const ob=oblById(obId); if(!ob) return;
+  uiTemp.editOb = {
+    name: ob.name, categoryId: ob.categoryId,
+    amount: ob.type!=='loan' ? ob.expectedAmount : 0,
+    dueDay: ob.dueDay || 1,
+    dueDate: ob.dueDate || todayISO(),
+    rateMode: 'installment',
+    principal: ob.loan ? ob.loan.principal : 0,
+    term: ob.loan ? ob.loan.term : 12,
+    installment: ob.loan ? ob.loan.installment : 0,
+    ea: ob.loan ? (Math.round((Math.pow(1+ob.loan.monthlyRate,12)-1)*10000)/100) : 0,
+  };
+  renderEditObligationSheet(obId);
+}
+function syncEditObFormFromDOM(){
+  const e=uiTemp.editOb; if(!e) return;
+  const byId=(id)=>document.getElementById(id);
+  if(byId('eo-name')) e.name=byId('eo-name').value;
+  if(byId('eo-cat')) e.categoryId=byId('eo-cat').value;
+  if(byId('eo-amount')) e.amount=parseInt(byId('eo-amount').dataset.raw||'0',10);
+  if(byId('eo-day')) e.dueDay=byId('eo-day').value;
+  if(byId('eo-date')) e.dueDate=byId('eo-date').value;
+  if(byId('eo-principal')) e.principal=parseInt(byId('eo-principal').dataset.raw||'0',10);
+  if(byId('eo-term')) e.term=byId('eo-term').value;
+  if(byId('eo-installment')) e.installment=parseInt(byId('eo-installment').dataset.raw||'0',10);
+  if(byId('eo-ea')) e.ea=byId('eo-ea').value;
+}
+function setEditRateMode(m){ syncEditObFormFromDOM(); uiTemp.editOb.rateMode=m; renderEditObligationSheet(uiTemp.editObId); }
+function renderEditObligationSheet(obId){
+  uiTemp.editObId = obId;
+  const ob=oblById(obId); if(!ob) return;
+  const e=uiTemp.editOb;
+  const cats = state.categories.filter(c=>c.type==='expense' && c.isActive);
+  const catOptions = cats.map(c=>`<option value="${c.id}" ${e.categoryId===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
+  let extra='';
+  if(ob.type==='recurring'){
+    extra = `
+    <div class="field"><label>Valor habitual</label><input data-money data-init="${e.amount}" id="eo-amount" inputmode="numeric"></div>
+    <div class="field"><label>Día habitual de pago</label><input id="eo-day" value="${e.dueDay}" inputmode="numeric"></div>
+    <div class="help">Esto también corrige la(s) cuota(s) que ya se habían generado y todavía no has pagado — no se toca lo que ya está pagado.</div>`;
+  } else if(ob.type==='one_time'){
+    extra = `
+    <div class="field"><label>Valor</label><input data-money data-init="${e.amount}" id="eo-amount" inputmode="numeric"></div>
+    <div class="field"><label>Fecha de vencimiento</label><input type="date" id="eo-date" value="${e.dueDate}"></div>`;
+  } else if(ob.type==='loan'){
+    const locked = (ob.loan.paidInstallments||0) > 0;
+    if(locked){
+      extra = `<div class="help">Ya registraste ${ob.loan.paidInstallments} pago(s) de este préstamo, así que el capital, el plazo y la tasa no se pueden editar aquí — cambiarían toda la tabla de amortización sobre pagos que ya hiciste. Si necesitas corregir el saldo o la cuota desde ahora, usa "Ajustar cuotas" o "Abono extraordinario" en el detalle del préstamo.</div>`;
+    } else {
+      extra = `
+      <div class="field"><label>Capital inicial</label><input data-money data-init="${e.principal}" id="eo-principal" inputmode="numeric"></div>
+      <div class="field"><label>Plazo (meses)</label><input id="eo-term" value="${e.term}" inputmode="numeric"></div>
+      <div class="chip-row"><button class="chip ${e.rateMode==='rate'?'active':''}" onclick="setEditRateMode('rate')">Conozco la tasa</button><button class="chip ${e.rateMode==='installment'?'active':''}" onclick="setEditRateMode('installment')">Conozco la cuota</button></div>
+      ${e.rateMode==='rate' ? `<div class="field"><label>Tasa efectiva anual (%)</label><input id="eo-ea" value="${e.ea}" inputmode="decimal"></div>` : `<div class="field"><label>Cuota mensual</label><input data-money data-init="${e.installment}" id="eo-installment" inputmode="numeric"></div>`}
+      <div class="help">Como todavía no has registrado ningún pago, puedes corregir estos valores libremente — se recalcula la tabla de amortización completa.</div>`;
+    }
+  }
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Editar obligación</div>
+    <div class="field"><label>Nombre</label><input id="eo-name" value="${e.name}"></div>
+    <div class="field"><label>Categoría</label><select id="eo-cat">${catOptions}</select></div>
+    ${extra}
+    <button class="btn btn-primary" onclick="saveEditObligation('${obId}')">Guardar cambios</button>`);
+}
+function saveEditObligation(obId){
+  const ob=oblById(obId); if(!ob) return;
+  const name=document.getElementById('eo-name').value.trim();
+  const categoryId=document.getElementById('eo-cat').value;
+  if(!name){ showToast('Este campo necesita un nombre'); return; }
+  ob.name=name; ob.categoryId=categoryId;
+
+  if(ob.type==='recurring'){
+    const amount=parseInt(document.getElementById('eo-amount').dataset.raw||'0',10);
+    const day=Math.min(31,Math.max(1,parseInt(document.getElementById('eo-day').value||'1',10)));
+    if(amount<=0){ showToast('Escribe un monto mayor a cero'); return; }
+    ob.expectedAmount=amount; ob.dueDay=day;
+    state.obligationInstances.filter(i=>i.obligationId===obId && i.status!=='paid' && i.status!=='cancelled').forEach(i=>{
+      i.expectedAmount=amount;
+      i.remainingAmount=Math.max(0, amount-i.paidAmount);
+      i.dueDate=dueDateForPeriod(i.period, day);
+      i.status = i.remainingAmount<=0 ? 'paid' : (i.paidAmount>0 ? 'partially_paid' : (i.dueDate<todayISO() ? 'overdue' : 'pending'));
+    });
+  } else if(ob.type==='one_time'){
+    const amount=parseInt(document.getElementById('eo-amount').dataset.raw||'0',10);
+    const date=document.getElementById('eo-date').value;
+    if(amount<=0){ showToast('Escribe un monto mayor a cero'); return; }
+    if(!date){ showToast('Elige una fecha de vencimiento'); return; }
+    ob.expectedAmount=amount; ob.dueDate=date;
+    state.obligationInstances.filter(i=>i.obligationId===obId && i.status!=='paid' && i.status!=='cancelled').forEach(i=>{
+      i.expectedAmount=amount;
+      i.remainingAmount=Math.max(0, amount-i.paidAmount);
+      i.dueDate=date;
+      i.period=periodForDate(date, currentIncomeDays());
+      i.status = i.remainingAmount<=0 ? 'paid' : (i.paidAmount>0 ? 'partially_paid' : (date<todayISO() ? 'overdue' : 'pending'));
+    });
+  } else if(ob.type==='loan' && (ob.loan.paidInstallments||0)===0){
+    const principal=parseInt(document.getElementById('eo-principal').dataset.raw||'0',10);
+    const term=parseInt(document.getElementById('eo-term').value||'0',10);
+    if(principal<=0||term<=0){ showToast('Necesitamos el capital y el plazo para calcular la cuota'); return; }
+    let monthlyRate, installment;
+    if(uiTemp.editOb.rateMode==='rate'){
+      const ea=parseFloat(document.getElementById('eo-ea').value||'0')/100;
+      monthlyRate=eaToMonthly(ea); installment=Math.round(pmt(principal,monthlyRate,term));
+    } else {
+      installment=parseInt(document.getElementById('eo-installment').dataset.raw||'0',10);
+      if(installment<=0){ showToast('Escribe cuánto es la cuota mensual'); return; }
+      monthlyRate=impliedMonthlyRate(principal,installment,term);
+    }
+    ob.loan.principal=principal; ob.loan.currentBalance=principal; ob.loan.term=term;
+    ob.loan.monthlyRate=monthlyRate; ob.loan.installment=installment; ob.loan.nextInstallmentAmount=null;
+    ob.expectedAmount=installment+(ob.loan.insurance||0);
+    state.obligationInstances.filter(i=>i.obligationId===obId && i.status!=='paid' && i.status!=='cancelled').forEach(i=>{
+      i.expectedAmount=ob.expectedAmount;
+      i.remainingAmount=Math.max(0, ob.expectedAmount-i.paidAmount);
+    });
+  }
+  saveState(); closeSheet(); showToast('Obligación actualizada'); render();
 }
 function openEditLoanInsurance(obId){
   const ob=oblById(obId); if(!ob || !ob.loan) return;

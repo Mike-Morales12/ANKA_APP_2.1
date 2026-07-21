@@ -330,7 +330,18 @@ let state = null;
 let uiTemp = {}; // transient form state per sheet/screen
 let sessionUnlocked = false;
 
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+function todayISO(){
+  // OJO: nunca usar new Date().toISOString() aquí. toISOString() SIEMPRE convierte a UTC
+  // antes de formatear, así que en cualquier zona horaria detrás de UTC (Colombia es
+  // UTC-5), la fecha "salta" al día siguiente varias horas antes de la medianoche local
+  // (en Colombia, desde las 7pm). Usamos los componentes de fecha LOCALES del navegador
+  // en su lugar, para que "hoy" siempre sea el día real del usuario, sin importar la hora.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function isoAddDays(dateISO, n){
   const d = new Date(dateISO+'T12:00:00');
   d.setDate(d.getDate()+n);

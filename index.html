@@ -1804,22 +1804,41 @@ function openConfirmPaymentSheet(instId){
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Confirmar pago</div><div class="sheet-sub">${ob.name} · Saldo pendiente ${formatMoney(inst.remainingAmount)}</div>
   <input data-money data-init="${inst.remainingAmount}" id="pay-amount" class="money-display" inputmode="numeric">
   <div class="field"><label>Fecha de pago</label><input type="date" id="pay-date" value="${todayISO()}"></div>
+  <div class="help" style="margin-top:-6px;margin-bottom:14px">¿Pagaste de más? Puedes escribir un monto mayor al saldo — te preguntaremos qué hacer con el excedente.</div>
   <button class="btn btn-primary" onclick="confirmPayment('${instId}')">Confirmar pago</button>`);
 }
 function confirmPayment(instId){
   const amount=parseInt(document.getElementById('pay-amount').dataset.raw||'0',10);
   const date=document.getElementById('pay-date').value||todayISO();
   const inst = state.obligationInstances.find(i=>i.id===instId);
-  const ob = oblById(inst.obligationId);
   if(amount<=0){ showToast('Escribe un monto mayor a cero'); return; }
-  if(amount>inst.remainingAmount){ showToast('Ese pago es mayor al saldo que queda pendiente'); return; }
-  inst.paidAmount += amount;
-  inst.remainingAmount = Math.max(0, inst.remainingAmount-amount);
+  if(amount>inst.remainingAmount){ openOverpaymentConfirm(instId, amount, date); return; }
+  applyPayment(instId, amount, date);
+}
+function openOverpaymentConfirm(instId, amount, date){
+  const inst = state.obligationInstances.find(i=>i.id===instId);
+  const ob = oblById(inst.obligationId);
+  const excess = amount - inst.remainingAmount;
+  const excessMsg = ob.type==='loan'
+    ? `El excedente de ${formatMoney(excess)} se abona directo al saldo del préstamo — baja tu deuda más rápido, sin cambiar tu cuota ni tu plazo. Si prefieres que ese abono reduzca tu próxima cuota o tu plazo restante en vez de esto, cancela y usa "Abono extraordinario" desde el detalle del préstamo.`
+    : `El excedente de ${formatMoney(excess)} se registra como un gasto aparte en ${catById(ob.categoryId)?.name||'la misma categoría'}, ya que esta obligación no tiene más saldo pendiente que cubrir.`;
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Vas a pagar más de lo pendiente</div>
+  <div class="sheet-sub">El saldo de ${ob.name} era ${formatMoney(inst.remainingAmount)}, pero vas a registrar ${formatMoney(amount)}. ${excessMsg}</div>
+  <button class="btn btn-primary" onclick="applyPayment('${instId}',${amount},'${date}')">Confirmar de todas formas</button>
+  <button class="btn btn-text" onclick="closeSheet()">Cancelar</button>`);
+}
+function applyPayment(instId, amount, date){
+  const inst = state.obligationInstances.find(i=>i.id===instId);
+  const ob = oblById(inst.obligationId);
+  const settleAmount = Math.min(amount, inst.remainingAmount);
+  const excess = Math.max(0, amount-inst.remainingAmount);
+  inst.paidAmount += settleAmount;
+  inst.remainingAmount = Math.max(0, inst.remainingAmount-settleAmount);
   inst.status = inst.remainingAmount<=0 ? 'paid' : 'partially_paid';
-  state.movements.push({id:uid(),type:'expense',amount,categoryId:ob.categoryId,description:ob.name,date,note:'',sourceType:'obligation_payment',sourceId:inst.id,createdAt:Date.now()});
+  state.movements.push({id:uid(),type:'expense',amount:settleAmount,categoryId:ob.categoryId,description:ob.name,date,note:'',sourceType:'obligation_payment',sourceId:inst.id,createdAt:Date.now()});
   if(ob.type==='loan' && ob.loan){
     const insurance = ob.loan.insurance||0;
-    const loanPortion = Math.max(0, amount-insurance);
+    const loanPortion = Math.max(0, settleAmount-insurance);
     const rate = ob.loan.monthlyRate;
     const interest = ob.loan.currentBalance*rate;
     const principal = Math.min(ob.loan.currentBalance, Math.max(0, loanPortion-interest));
@@ -1828,9 +1847,19 @@ function confirmPayment(instId){
       ob.loan.paidInstallments = (ob.loan.paidInstallments||0)+1;
       ob.loan.nextInstallmentAmount = null;
     }
+    // Sobrepago en préstamo: el excedente se abona directo al saldo (no cambia cuota/plazo,
+    // eso lo maneja "Abono extraordinario" si el usuario prefiere esa ruta en su lugar).
+    if(excess>0){
+      ob.loan.currentBalance = Math.max(0, ob.loan.currentBalance-excess);
+      state.movements.push({id:uid(),type:'expense',amount:excess,categoryId:ob.categoryId,description:ob.name+' (abono extra)',date,note:'Abono a capital por sobrepago',sourceType:'debt_payment',sourceId:ob.id,createdAt:Date.now()});
+    }
     if(ob.loan.currentBalance<=0) ob.isActive=false;
+  } else if(excess>0){
+    // Sobrepago en obligación fija (no préstamo): el excedente no tiene "saldo" al cual
+    // aplicarse, así que simplemente queda como un gasto aparte, sin inventarle un destino.
+    state.movements.push({id:uid(),type:'expense',amount:excess,categoryId:ob.categoryId,description:ob.name+' (excedente)',date,note:'Pagaste más de lo pendiente; el excedente se registró como gasto aparte',sourceType:'manual',createdAt:Date.now()});
   }
-  saveState(); closeSheet(); showToast('Pago confirmado'); render();
+  saveState(); closeSheet(); showToast(excess>0?'Pago registrado con excedente':'Pago confirmado'); render();
 }
 
 function openHistoricalPaymentPresetSheet(obId){ openHistoricalPaymentSheet(obId); }

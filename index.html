@@ -506,13 +506,27 @@ function saveState(){
 }
 
 /* ======================= MONEY / FORMAT ======================= */
-function currencySymbol(){ return state.user.currency==='USD' ? 'US$' : '$'; }
-function formatMoney(n){
-  n = Math.round(n||0);
-  if(state.user.currency==='USD'){
-    return 'US$ ' + (n/1).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  }
-  return '$ ' + n.toLocaleString('es-CO');
+// Config de monedas: locale para separadores de miles/decimales correctos por región, y
+// un símbolo PROPIO (no el que da Intl automáticamente) porque varias de estas monedas
+// comparten el signo "$" — sin distinguir, un monto en pesos chilenos y uno en dólares
+// se verían idénticos. Verificado contra Intl.NumberFormat antes de fijar cada locale.
+const CURRENCY_CONFIG = {
+  COP:{locale:'es-CO',decimals:0,symbol:'$'},
+  USD:{locale:'en-US',decimals:2,symbol:'US$'},
+  EUR:{locale:'es-ES',decimals:2,symbol:'€'},
+  MXN:{locale:'es-MX',decimals:2,symbol:'MX$'},
+  PEN:{locale:'es-PE',decimals:2,symbol:'S/'},
+  CLP:{locale:'es-CL',decimals:0,symbol:'CLP$'},
+  ARS:{locale:'es-AR',decimals:2,symbol:'AR$'},
+  BRL:{locale:'pt-BR',decimals:2,symbol:'R$'},
+};
+function currencyConfig(cur){ return CURRENCY_CONFIG[cur] || CURRENCY_CONFIG.COP; }
+function currencySymbol(){ return currencyConfig(state.user.currency).symbol; }
+function formatMoney(n){ return formatMoneyCurrency(n, state.user.currency); }
+function formatMoneyCurrency(n, cur){
+  const cfg = currencyConfig(cur);
+  const num = new Intl.NumberFormat(cfg.locale, {minimumFractionDigits:cfg.decimals, maximumFractionDigits:cfg.decimals}).format(Math.round((n||0)*100)/100);
+  return cfg.symbol + ' ' + num;
 }
 function maskedOrValue(html){ return state.showAmounts ? html : '••••••'; }
 function fmtDateRel(dateStr){
@@ -543,13 +557,13 @@ function attachMoneyMask(input, initialCents){
   // desalinea el conteo de dígitos usado para ubicar el cursor y corrompe los siguientes
   // números que se escriban.
   function normalize(digits){ return digits.replace(/^0+/,''); }
-  function moneyPrefix(){ return state.user.currency==='USD' ? 'US$ ' : '$ '; }
+  function moneyPrefix(){ return currencyConfig(state.user.currency).symbol + ' '; }
   function formatRaw(raw){
     const digits=normalize(clean(raw));
     if(digits===''){ return moneyPrefix(); } // campo vacío: solo el símbolo, sin "0" pegado
     const num=parseInt(digits,10);
-    if(state.user.currency==='USD') return 'US$ ' + num.toLocaleString('en-US');
-    return '$ ' + num.toLocaleString('es-CO');
+    const cfg=currencyConfig(state.user.currency);
+    return cfg.symbol + ' ' + num.toLocaleString(cfg.locale);
   }
   function digitIndexAt(pos){
     return clean(input.value.slice(0, Math.max(0,pos||0))).length;
@@ -1063,6 +1077,16 @@ const SECURITY_QUESTIONS=[
   '¿Cómo se llamaba tu colegio de primaria?',
   '¿Cuál es el segundo nombre de tu mamá?'
 ];
+const CURRENCY_OPTIONS=[
+  {code:'COP', flag:'🇨🇴', label:'Peso colombiano'},
+  {code:'USD', flag:'🇺🇸', label:'Dólar estadounidense'},
+  {code:'EUR', flag:'🇪🇺', label:'Euro'},
+  {code:'MXN', flag:'🇲🇽', label:'Peso mexicano'},
+  {code:'PEN', flag:'🇵🇪', label:'Sol peruano'},
+  {code:'CLP', flag:'🇨🇱', label:'Peso chileno'},
+  {code:'ARS', flag:'🇦🇷', label:'Peso argentino'},
+  {code:'BRL', flag:'🇧🇷', label:'Real brasileño'},
+];
 function screenOnboarding(){
   const step = uiTemp.step||0;
   uiTemp.ob = uiTemp.ob || {nickname:'',password:'',securityQuestion:'¿Cuál es el nombre de tu primera mascota?',securityAnswer:'',currency:'COP',incomeFrequency:'mensual',incomeDay:1,incomeDay2:15,incomeAmount:0,budgetGeneral:0,quickObligations:[],pin:''};
@@ -1078,10 +1102,9 @@ function screenOnboarding(){
     </select><div class="help">La usaremos para ayudarte a recuperar tu contraseña o PIN si los olvidas. ANKA no usa correo electrónico, así que esta es tu única forma de recuperación.</div></div>
     <div class="field"><label>Tu respuesta</label><input id="ob-seca" value="${ob.securityAnswer}" placeholder="Escribe tu respuesta"></div>`;
   } else if(step===1){
-    body=`<div class="ob-title">¿En qué moneda manejas tu dinero?</div><div class="ob-desc">Podrás cambiarla luego desde Configuración.</div>
-    <div class="chip-row" style="margin-top:12px">
-      <button class="chip ${ob.currency==='COP'?'active':''}" onclick="uiTemp.ob.currency='COP';render()">Peso colombiano (COP)</button>
-      <button class="chip ${ob.currency==='USD'?'active':''}" onclick="uiTemp.ob.currency='USD';render()">Dólar (USD)</button>
+    body=`<div class="ob-title">¿En qué moneda manejas tu dinero?</div><div class="ob-desc">⚠️ Esta elección es <b>permanente</b> — no podrás cambiarla después. Esto es a propósito: cambiar de moneda más adelante mezclaría montos de distintos valores sin ninguna tasa de conversión de por medio, y tus números dejarían de tener sentido.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+      ${CURRENCY_OPTIONS.map(c=>`<button class="settings-row" style="text-align:left;border:1.5px solid ${ob.currency===c.code?'var(--blue-900)':'var(--border)'};border-radius:12px;background:${ob.currency===c.code?'var(--bg-accent, var(--blue-50))':'var(--surface-2)'}" onclick="uiTemp.ob.currency='${c.code}';render()"><span style="font-size:20px;margin-right:10px">${c.flag}</span><span class="lbl">${c.label} (${c.code})</span>${ob.currency===c.code?icon('check',18):''}</button>`).join('')}
     </div>`;
   } else if(step===2){
     body=`<div class="ob-title">¿Con qué frecuencia recibes tu ingreso principal?</div><div class="ob-desc">Así calculamos mejor tu disponible entre un pago y otro.</div>
@@ -1152,7 +1175,6 @@ function screenOnboarding(){
     <button class="btn btn-primary" style="flex:2" onclick="${isLast?'finishOnboarding()':'obNext()'}">${isLast?'Ir al Dashboard':'Continuar'}</button>
   </div></div></div>`;
 }
-function formatMoneyCurrency(n,cur){ return (cur==='USD'?'US$ ':'$ ') + Math.round(n||0).toLocaleString(cur==='USD'?'en-US':'es-CO'); }
 function toggleQuickOb(name){
   const ob=uiTemp.ob;
   const idx=ob.quickObligations.findIndex(q=>q.templateName===name || q.name===name);
@@ -2529,7 +2551,7 @@ function screenSettings(){
     <div class="settings-row" onclick="editPassword()"><div class="ic">🔒</div><div class="lbl">Cambiar contraseña</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="editPin()"><div class="ic">🔢</div><div class="lbl">Cambiar PIN</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="openEditSecurityQuestion()"><div class="ic">🛟</div><div class="lbl">Pregunta de seguridad</div>${icon('chevronR',16)}</div>
-    <div class="settings-row" onclick="editCurrency()"><div class="ic">💱</div><div class="lbl">Moneda</div><div class="val">${u.currency}</div>${icon('chevronR',16)}</div>
+    <div class="settings-row" onclick="editCurrency()"><div class="ic">💱</div><div class="lbl">Moneda</div><div class="val">${(CURRENCY_OPTIONS.find(c=>c.code===u.currency)||{}).flag||''} ${u.currency}</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="openIncomeScheduleEditor()"><div class="ic">📅</div><div class="lbl">Frecuencia y día(s) de ingreso</div><div class="val">${u.incomeFrequency==='quincenal'?'Quincenal · '+expectedIncomeDays().join(' y '):'Mensual · día '+u.primaryIncomeDay}</div>${icon('chevronR',16)}</div>
     <div class="settings-row" onclick="toggleTheme()"><div class="ic">${icon(u.theme==='dark'?'moon':'sun',16)}</div><div class="lbl">Tema oscuro</div><div class="switch ${u.theme==='dark'?'on':''}"><div class="knob"></div></div></div>
     <div class="settings-row"><div class="ic">🔔</div><div class="lbl">Notificaciones</div><div class="switch ${u.notificationsEnabled?'on':''}" onclick="toggleSetting('notificationsEnabled')"><div class="knob"></div></div></div>
@@ -2584,14 +2606,10 @@ function savePin(){
   state.user.pinHash=simpleHash(v); saveState(); closeSheet(); showToast('PIN actualizado');
 }
 function editCurrency(){
-  const other = state.user.currency==='COP'?'USD':'COP';
-  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Cambiar moneda</div>
-  <div class="sheet-sub">Tu moneda actual es <b>${state.user.currency}</b>. Cambiar a <b>${other}</b> solo afecta cómo se muestran los montos desde ahora; los números que ya registraste no se convierten automáticamente.</div>
-  <button class="btn btn-primary" onclick="saveCurrency('${other}')">Cambiar a ${other}</button>
-  <button class="btn btn-text" onclick="closeSheet()">Cancelar</button>`);
-}
-function saveCurrency(c){
-  state.user.currency=c; saveState(); closeSheet(); render(); showToast('Moneda cambiada a '+c);
+  const cfg = CURRENCY_OPTIONS.find(c=>c.code===state.user.currency);
+  openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Moneda</div>
+  <div class="sheet-sub">Tu cuenta usa <b>${cfg?cfg.flag+' '+cfg.label:''} (${state.user.currency})</b>. Esta elección quedó fija desde que creaste tu cuenta y no se puede cambiar — así se evita mezclar montos de distintas monedas sin ninguna tasa de conversión real de por medio, lo que dañaría todos tus números históricos.</div>
+  <button class="btn btn-text" onclick="closeSheet()">Entendido</button>`);
 }
 function openEditSecurityQuestion(){
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Pregunta de seguridad</div>

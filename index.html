@@ -47,7 +47,7 @@ input,select,textarea{font-family:'Inter',sans-serif;font-size:16px;}
 ::-webkit-scrollbar{display:none;}
 a{color:inherit;}
 
-#screen-root{padding:0 16px 100px;min-height:var(--app-height);}
+#screen-root{padding:calc(12px + env(safe-area-inset-top)) 16px 100px;min-height:var(--app-height);}
 .screen{animation:fadein .18s ease;}
 @keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
 .full-screen{padding:0;min-height:var(--app-height);}
@@ -205,7 +205,7 @@ a{color:inherit;}
 
 /* toast */
 #toast{position:fixed;left:50%;bottom:104px;transform:translate(-50%,20px);background:var(--text-900);color:#fff;padding:12px 20px;border-radius:100px;font-size:14px;font-weight:600;opacity:0;transition:all .25s ease;z-index:70;max-width:380px;text-align:center;pointer-events:none;}
-#update-banner{position:fixed;left:12px;right:12px;bottom:12px;background:var(--blue-900);color:#fff;padding:14px 16px;border-radius:var(--r-card);box-shadow:var(--shadow);z-index:80;display:flex;align-items:center;gap:12px;font-size:13.5px;max-width:460px;margin:0 auto;}
+#update-banner{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));background:var(--blue-900);color:#fff;padding:14px 16px;border-radius:var(--r-card);box-shadow:var(--shadow);z-index:45;display:flex;align-items:center;gap:12px;font-size:13.5px;max-width:406px;margin:0 auto;}
 #update-banner button{background:#fff;color:var(--blue-900);border:none;border-radius:100px;padding:8px 14px;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0;}
 #toast.show{opacity:1;transform:translate(-50%,0);}
 
@@ -215,7 +215,7 @@ a{color:inherit;}
 .icon-opt.selected{border-color:var(--blue-900);background:var(--blue-100);}
 
 /* onboarding */
-.ob-progress{display:flex;gap:5px;padding:20px 20px 0;}
+.ob-progress{display:flex;gap:5px;padding:calc(20px + env(safe-area-inset-top)) 20px 0;}
 .ob-progress span{flex:1;height:4px;border-radius:100px;background:var(--gray-200);}
 .ob-progress span.done{background:var(--blue-900);}
 .ob-wrap{padding:24px 20px 24px;display:flex;flex-direction:column;min-height:var(--app-height);}
@@ -1126,7 +1126,7 @@ function screenOnboarding(){
     ${quinc?`<div class="help" style="text-align:center">Asumimos que tu otro pago quincenal es similar, para proyectar tu ingreso del mes en ${formatMoneyCurrency(ob.incomeAmount*2,ob.currency)}.</div>`:''}`;
   } else if(step===4){
     const projected = ob.incomeFrequency==='quincenal' ? ob.incomeAmount*2 : ob.incomeAmount;
-    body=`<div class="ob-title">¿Cuánto quieres poder gastar este mes?</div><div class="ob-desc">Danos un número general para empezar — no tienes que pensarlo mucho. Más adelante, en Presupuestos, vas a repartir ese número entre categorías (comida, transporte, etc.), y podrás cambiar todo esto cuando quieras. Por ahora solo es tu punto de partida. No puede superar tu ingreso ${ob.incomeFrequency==='quincenal'?'mensual proyectado':'registrado'} (${formatMoneyCurrency(projected,ob.currency)}).</div>
+    body=`<div class="ob-title">¿Cuánto quieres poder gastar en este periodo?</div><div class="ob-desc">Danos un número general para empezar — no tienes que pensarlo mucho. Más adelante, en Presupuestos, vas a repartir ese número entre categorías (comida, transporte, etc.), y podrás cambiar todo esto cuando quieras. Por ahora solo es tu punto de partida. No puede superar tu ingreso ${ob.incomeFrequency==='quincenal'?'mensual proyectado':'registrado'} (${formatMoneyCurrency(projected,ob.currency)}).</div>
     <input data-money data-init="${ob.budgetGeneral}" id="ob-budget" class="money-display" inputmode="numeric">`;
   } else if(step===5){
     const templates=['Arriendo','Internet','Celular','Parqueadero','Servicios públicos','Netflix','Spotify','Personalizada'];
@@ -1302,7 +1302,7 @@ function screenHome(){
   // (obligaciones pendientes de pago) porque ese dinero todavía no ha salido de la cuenta
   // del usuario. Sí descuenta gastado y ahorro apartado porque ese sí ya no está disponible.
   const saldoReal = ingresado - gastado - ahorro;
-  const heroState = disponible>0? {t:'Disponible para organizar este mes', ic:'✅'} : disponible===0? {t:'No queda dinero libre después de tus compromisos', ic:'⚠️'} : {t:'Tus compromisos superan los ingresos registrados', ic:'🔴'};
+  const heroState = disponible>0? {t:'Disponible para organizar este periodo', ic:'✅'} : disponible===0? {t:'No queda dinero libre después de tus compromisos', ic:'⚠️'} : {t:'Tus compromisos superan los ingresos registrados', ic:'🔴'};
   const insts = periodInstances(period).filter(i=>i.status!=='cancelled').sort((a,b)=> (statusOrder(a)-statusOrder(b)) || a.dueDate.localeCompare(b.dueDate));
   const overdueInsts = insts.filter(i=>i.status==='overdue');
   const overdueCount = overdueInsts.length;
@@ -1370,7 +1370,7 @@ function screenHome(){
   </div>` : ''}
 
   <div class="card">
-    <div class="section-title">Pagos de este mes <small onclick="nav('obligations')">Ver todos</small></div>
+    <div class="section-title">Pagos de este periodo <small onclick="nav('obligations')">Ver todos</small></div>
     <div style="font-size:13px;color:var(--text-700);margin-bottom:8px">${paidCount} de ${totalCount} pagadas</div>
     <div class="progress-track"><div class="progress-fill" style="width:${totalCount?Math.round(paidCount/totalCount*100):0}%"></div></div>
     <div style="margin-top:10px">
@@ -1502,7 +1502,7 @@ function screenMovements(){
   <div class="chip-row">
     ${['all','income','expense'].map(f=>`<button class="chip ${uiTemp.filter===f?'active':''}" onclick="uiTemp.filter='${f}';render()">${f==='all'?'Todos':f==='income'?'Ingresos':'Gastos'}</button>`).join('')}
   </div>
-  <div class="card" id="mv-list">${list.length===0? `<div class="empty-state"><div class="mascot">📭</div><p>${uiTemp.q?'No encontramos resultados. Prueba con otro término.':'Aún no hay movimientos en este mes.'}</p>${!uiTemp.q?'<button class="btn btn-primary btn-sm" onclick="openMovementForm(\'expense\')">Registrar movimiento</button>':''}</div>` : rows}</div>
+  <div class="card" id="mv-list">${list.length===0? `<div class="empty-state"><div class="mascot">📭</div><p>${uiTemp.q?'No encontramos resultados. Prueba con otro término.':'Aún no hay movimientos en este periodo.'}</p>${!uiTemp.q?'<button class="btn btn-primary btn-sm" onclick="openMovementForm(\'expense\')">Registrar movimiento</button>':''}</div>` : rows}</div>
   </div>`;
 }
 function renderMovementsList(){
@@ -1519,7 +1519,7 @@ function renderMovementsList(){
   });
   const box=document.getElementById('mv-list');
   if(!box) return;
-  box.innerHTML = list.length===0? `<div class="empty-state"><div class="mascot">📭</div><p>${uiTemp.q?'No encontramos resultados. Prueba con otro término.':'Aún no hay movimientos en este mes.'}</p>${!uiTemp.q?'<button class="btn btn-primary btn-sm" onclick="openMovementForm(\'expense\')">Registrar movimiento</button>':''}</div>` : rows;
+  box.innerHTML = list.length===0? `<div class="empty-state"><div class="mascot">📭</div><p>${uiTemp.q?'No encontramos resultados. Prueba con otro término.':'Aún no hay movimientos en este periodo.'}</p>${!uiTemp.q?'<button class="btn btn-primary btn-sm" onclick="openMovementForm(\'expense\')">Registrar movimiento</button>':''}</div>` : rows;
 }
 
 function openMovementForm(type, existing){
@@ -1759,7 +1759,7 @@ function openPaymentPicker(){
   const period=state.currentPeriod;
   const pend = periodInstances(period).filter(i=>i.status!=='paid'&&i.status!=='cancelled');
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Confirmar pago</div><div class="sheet-sub">Elige la obligación que pagaste</div>
-  ${pend.length===0?'<div class="empty-state"><p>No tienes pagos pendientes este mes.</p></div>':pend.map(i=>{const ob=oblById(i.obligationId);return `<div class="sheet-action" onclick="openConfirmPaymentSheet('${i.id}')"><div class="ic">${catById(ob.categoryId)?.icon||'📌'}</div><div class="txt"><div class="t">${ob.name}</div><div class="s">${formatMoney(i.remainingAmount)} · ${fmtDateRel(i.dueDate)}</div></div></div>`;}).join('')}`);
+  ${pend.length===0?'<div class="empty-state"><p>No tienes pagos pendientes en este periodo.</p></div>':pend.map(i=>{const ob=oblById(i.obligationId);return `<div class="sheet-action" onclick="openConfirmPaymentSheet('${i.id}')"><div class="ic">${catById(ob.categoryId)?.icon||'📌'}</div><div class="txt"><div class="t">${ob.name}</div><div class="s">${formatMoney(i.remainingAmount)} · ${fmtDateRel(i.dueDate)}</div></div></div>`;}).join('')}`);
 }
 function openConfirmPaymentSheet(instId){
   const inst = state.obligationInstances.find(i=>i.id===instId);
@@ -1804,7 +1804,7 @@ function openHistoricalPaymentSheet(presetObId){
     <div class="field"><label>Obligación</label><select id="hist-ob">${obs.map(o=>{const c=catById(o.categoryId);return `<option value="${o.id}" ${presetObId===o.id?'selected':''}>${c?c.icon:''} ${o.name}</option>`;}).join('')}</select></div>
     <div class="field"><label>Fecha en que se pagó</label><input type="date" id="hist-date" value="${todayISO()}"><div class="help">Puedes elegir una fecha anterior para reconstruir historial de pagos.</div></div>
     <div class="field"><label>Valor pagado</label><input data-money data-init="0" id="hist-amount" inputmode="numeric"></div>
-    <div class="field"><label>¿Con qué dinero se pagó?</label><select id="hist-source"><option value="previous">Dinero anterior / no descontar del mes actual</option><option value="current">Sueldo actual / descontar como gasto</option></select><div class="help">Si fue con dinero anterior, se registra historial pero no afecta Disponible hoy actual.</div></div>
+    <div class="field"><label>¿Con qué dinero se pagó?</label><select id="hist-source"><option value="previous">Dinero anterior / no descontar del periodo actual</option><option value="current">Sueldo actual / descontar como gasto</option></select><div class="help">Si fue con dinero anterior, se registra historial pero no afecta Disponible hoy actual.</div></div>
     <div class="card" style="box-shadow:none;border:1px solid var(--gray-200)"><div class="section-title" style="font-size:15px">Si es un préstamo antiguo</div>
       <div class="field"><label>Saldo actual real después de este pago</label><input data-money data-init="0" id="hist-loan-balance" inputmode="numeric"><div class="help">Opcional. Úsalo si conoces el saldo real de la deuda.</div></div>
       <div class="field"><label>Cuotas pagadas acumuladas</label><input id="hist-loan-paid" inputmode="numeric" placeholder="Ej: 8"><div class="help">Opcional. Ayuda a alinear préstamos que ya venían en curso.</div></div>
@@ -1918,7 +1918,7 @@ function screenObligationForm(){
       `<div class="field"><label>Cuota mensual</label><input data-money data-init="${f.installment}" id="ob-installment" inputmode="numeric"></div>`}
 
     <div class="form-group-label">Primer pago</div>
-    <div class="field"><label>Fecha del primer pago</label><input type="date" id="ob-first" value="${f.firstPaymentDate}"><div class="help">Puede ser del mes actual si esa cuota se debe pagar ahora.</div></div>
+    <div class="field"><label>Fecha del primer pago</label><input type="date" id="ob-first" value="${f.firstPaymentDate}"><div class="help">Puede ser de hoy mismo si esa cuota se debe pagar ya.</div></div>
 
     <div class="form-group-label">Cargos opcionales</div>
     <div class="field"><label>Seguro mensual (opcional)</label><input data-money data-init="${f.insurance||0}" id="ob-insurance" inputmode="numeric"><div class="help">Algunos créditos incluyen un seguro obligatorio. Agrégalo aquí para que tu cuota total sea exacta; no afecta el cálculo de intereses ni la tabla de amortización, que se calculan solo sobre el crédito.</div></div>
@@ -2164,7 +2164,7 @@ function saveEditObligation(obId){
 function openEditLoanInsurance(obId){
   const ob=oblById(obId); if(!ob || !ob.loan) return;
   openSheet(`<div class="sheet-handle"></div><div class="sheet-title">Seguro mensual del préstamo</div>
-  <div class="sheet-sub">Se suma a la cuota que ves cada mes, pero no afecta el cálculo de intereses ni la tabla de amortización.</div>
+  <div class="sheet-sub">Se suma a la cuota que ves en cada periodo de pago, pero no afecta el cálculo de intereses ni la tabla de amortización.</div>
   <input data-money data-init="${ob.loan.insurance||0}" id="loan-insurance" class="money-display" inputmode="numeric">
   <button class="btn btn-primary" style="margin-top:16px" onclick="saveLoanInsurance('${obId}')">Guardar</button>`);
 }
@@ -2381,7 +2381,7 @@ function screenBudgets(){
     <div style="font-size:12px;color:var(--text-700);margin-top:8px">Proyección con cuotas pendientes: ${formatMoney(oblProjection)}. Este control no se suma al presupuesto general para evitar doble conteo; los presupuestos específicos se manejan por categoría.</div>
   </div>
   <div class="section-title" style="padding:0 2px">Categorías</div>
-  ${rows.length===0?`<div class="card empty-state"><p>No has configurado un presupuesto. Define cuánto deseas gastar este mes.</p><button class="btn btn-primary btn-sm" onclick="openBudgetEditor()">Definir presupuesto</button></div>`:
+  ${rows.length===0?`<div class="card empty-state"><p>No has configurado un presupuesto. Define cuánto deseas gastar en este periodo.</p><button class="btn btn-primary btn-sm" onclick="openBudgetEditor()">Definir presupuesto</button></div>`:
    rows.map(r=>`<div class="card">
      <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600">${r.cat.icon} ${r.cat.name}</div><span class="badge badge-${r.st.key}">${r.st.label}</span></div>
      <div style="font-size:13px;color:var(--text-700);margin:6px 0">${formatMoney(r.spent)} de ${formatMoney(r.b.limitAmount)}</div>
@@ -2436,7 +2436,7 @@ function screenStats(){
   const prevGastado=getGastado(prevPeriod);
   return `<div class="screen">${subHeader('Estadísticas', "nav('settings')")}
   <div class="card"><div class="section-title">Gastos por categoría</div>
-  ${sorted.length===0?'<div class="empty-state" style="padding:12px 0"><p>Sin datos este mes.</p></div>':sorted.map(([cid,val])=>{
+  ${sorted.length===0?'<div class="empty-state" style="padding:12px 0"><p>Sin datos en este periodo.</p></div>':sorted.map(([cid,val])=>{
     const cat=catById(cid); const pct=Math.round(val/total*100);
     return `<div class="stat-bar-row"><div class="lbl"><span>${cat?cat.icon+' '+cat.name:cid}</span><span>${formatMoney(val)} · ${pct}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
   }).join('')}</div>
@@ -2475,13 +2475,21 @@ function computeNotifications(){
     else if(pct>=80) notifs.push({id:'b80-'+b.id,title:'Atención',body:`Has consumido el 80% de tu presupuesto de ${cat.name}.`,type:'budget',relatedId:b.categoryId,date:todayISO(),action:'budgets'});
   });
   const ingreso=getIngresado(period), usado=getGastado(period)+getComprometido(period)+getAhorroApartado();
-  if(ingreso>0 && usado/ingreso>=0.8) notifs.push({id:'avail80-'+period,title:'Atención: 80% del dinero comprometido',body:'Ya usaste o comprometiste al menos el 80% de tus ingresos del mes.',type:'budget',relatedId:null,date:todayISO(),action:'available'});
+  if(ingreso>0 && usado/ingreso>=0.8) notifs.push({id:'avail80-'+period,title:'Atención: 80% del dinero comprometido',body:'Ya usaste o comprometiste al menos el 80% de tus ingresos de este periodo.',type:'budget',relatedId:null,date:todayISO(),action:'available'});
   // Recordatorio de ingreso: como cada periodo ahora arranca justo el día de pago, avisar
   // es simplemente "¿ya registraste el ingreso de este periodo?" — no hace falta la lógica
   // anterior de "cuál de los dos pagos del mes" porque quincenal ahora tiene un periodo
   // propio por cada pago, no uno compartido.
   if(getIngresado(period)===0){
     notifs.push({id:'income-'+period, title:'Registra tu ingreso', body:`Tu periodo actual empezó el ${fmtDateRel(period)} y todavía no tienes ingresos registrados. Regístralo para mantener tu disponible al día.`, type:'income', relatedId:null, date:todayISO(), action:'movements'});
+  }
+  // Recordatorio de fin de día: pasadas las 8pm, si no has registrado NADA hoy (ni un
+  // gasto ni un ingreso), un empujón para que no se te acumule ni se te olvide antes de
+  // dormir. Se identifica por la fecha de hoy, así que desaparece solo al día siguiente.
+  const hourNow = new Date().getHours();
+  const loggedToday = state.movements.some(m=>m.date===todayISO());
+  if(hourNow>=20 && !loggedToday){
+    notifs.push({id:'eod-'+todayISO(), title:'¿Algo que registrar hoy?', body:'Antes de que se te pase, registra cualquier gasto o ingreso que hayas tenido hoy.', type:'daily', relatedId:null, date:todayISO(), action:'movements'});
   }
   // Recordatorio de respaldo. ANKA guarda todo solo en este navegador (sin nube), así que
   // un respaldo desactualizado es el escenario real de "perderlo todo" del MVP actual.
@@ -2502,7 +2510,7 @@ function screenNotifications(){
   function notifRow(n){
     return `<div class="notif-item ${state.notificationReadIds.includes(n.id)?'':'unread'}">
       <div style="flex:1;display:flex;gap:10px;cursor:pointer" onclick="handleNotifTap('${n.id}','${n.action}','${n.relatedId||''}')">
-        <div class="ic">${icon(n.type==='budget'?'stats':n.type==='income'?'download':n.type==='backup'?'cloud':'calendar',18)}</div>
+        <div class="ic">${icon(n.type==='budget'?'stats':n.type==='income'?'download':n.type==='backup'?'cloud':n.type==='daily'?'plus':'calendar',18)}</div>
         <div style="flex:1"><div class="n">${n.title}</div><div class="b">${n.body}</div><div class="t">${fmtDateRel(n.date)}</div></div>
       </div>
       ${state.notificationReadIds.includes(n.id)?`<button class="icon-btn-sm" title="Eliminar" onclick="dismissNotif('${n.id}')">${icon('trash',15)}</button>`:''}
